@@ -132,7 +132,8 @@ exports.listLeads = async (req, res) => {
 
 exports.getLead = async (req, res) => {
   try {
-    const lead = await Lead.findOne({ _id: req.params.id, agentId: req.user.id });
+    const lead = await Lead.findOne({ _id: req.params.id, agentId: req.user.id })
+      .populate('contactId', 'name phone');
     if (!lead) return res.status(404).json({ error: 'Lead not found.' });
     res.status(200).json({ lead });
   } catch (error) {

@@ -38,5 +38,9 @@ const activitySchema = new mongoose.Schema(
 
 // Agenda queries: an agent's activities ordered by time.
 activitySchema.index({ agentId: 1, scheduledAt: 1 });
+// The overdue-sweep looks up scheduled activities whose time has passed.
+activitySchema.index({ status: 1, scheduledAt: 1 });
+// Contact timeline lookups.
+activitySchema.index({ agentId: 1, contactId: 1 });
 
 module.exports = mongoose.model('Activity', activitySchema);

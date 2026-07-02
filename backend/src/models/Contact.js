@@ -24,7 +24,14 @@ const contactSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// One person per phone within an agent's book (used by find-or-create).
-contactSchema.index({ agentId: 1, phone: 1 });
+// One person per phone within an agent's book (used by find-or-create). Unique so
+// concurrent find-or-create can't create duplicates; the partial filter keeps the
+// constraint from firing on the many contacts that have no phone at all.
+contactSchema.index(
+  { agentId: 1, phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $type: 'string' } } }
+);
+// Contact list ordering (most recently touched first).
+contactSchema.index({ agentId: 1, updatedAt: -1 });
 
 module.exports = mongoose.model('Contact', contactSchema);

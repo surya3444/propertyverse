@@ -3,14 +3,15 @@ const leadController = require('../controllers/leadController');
 const matchController = require('../controllers/matchController');
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { aiLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
 // All lead routes require a logged-in agent.
 router.use(auth);
 
-// Voice-note capture: form-data field named 'audio'.
-router.post('/voice', upload.single('audio'), leadController.createLeadFromVoice);
+// Voice-note capture: form-data field named 'audio'. Rate-limited (paid AI call).
+router.post('/voice', aiLimiter, upload.single('audio'), leadController.createLeadFromVoice);
 
 router.post('/', leadController.createLead);
 router.get('/', leadController.listLeads);

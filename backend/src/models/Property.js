@@ -82,5 +82,11 @@ const propertySchema = new mongoose.Schema({
 
 // Enables geospatial "properties near this point" queries.
 propertySchema.index({ geo: '2dsphere' });
+// Primary access pattern: an agent's inventory, newest first.
+propertySchema.index({ agentId: 1, createdAt: -1 });
+// Matching filters (available inventory by listing/type).
+propertySchema.index({ agentId: 1, listingType: 1, propertyType: 1, isAvailable: 1 });
+// Contact timeline lookups (properties an owner is linked to).
+propertySchema.index({ agentId: 1, ownerId: 1 });
 
 module.exports = mongoose.model('Property', propertySchema);

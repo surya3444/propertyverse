@@ -3,6 +3,7 @@ const propertyController = require('../controllers/propertyController');
 const matchController = require('../controllers/matchController');
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { aiLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -10,8 +11,8 @@ const router = express.Router();
 router.use(auth);
 
 // Voice-note draft: form-data field named 'audio'. Returns extracted fields
-// (not persisted) for the agent to review before saving.
-router.post('/voice', upload.single('audio'), propertyController.draftPropertyFromVoice);
+// (not persisted) for the agent to review before saving. Rate-limited (paid AI).
+router.post('/voice', aiLimiter, upload.single('audio'), propertyController.draftPropertyFromVoice);
 
 router.post('/', propertyController.createProperty);
 router.get('/', propertyController.listProperties);

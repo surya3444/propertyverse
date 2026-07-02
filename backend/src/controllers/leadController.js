@@ -1,7 +1,9 @@
 const Lead = require('../models/Lead');
-const { extractLeadFromAudio } = require('../services/geminiService');
+const { extractLeadFromAudio, AiExtractionError } = require('../services/geminiService');
 const locationService = require('../services/locationService');
 const { findOrCreateContact } = require('../services/contactService');
+const audit = require('../services/auditService');
+const { parsePagination } = require('../utils/query');
 
 // Normalise a location selection ({label, placeId, lat, lng}) into a GeoJSON
 // point. Returns undefined when coordinates are absent.
@@ -50,12 +52,15 @@ exports.createLeadFromVoice = async (req, res) => {
       role: roleForTxn(transactionType),
     });
 
-    // 4. Map the extracted data to our Lead model.
+    // 4. Map the extracted data to our Lead model. Voice leads are AI-extracted,
+    //    so they start unreviewed until the agent confirms the requirements.
     const newLead = new Lead({
       agentId: req.user.id,
       contactId: contact._id,
       phoneNumber,
       clientName: name,
+      source: 'voice',
+      reviewed: false,
       requirements: {
         transactionType,
         budgetMax: extractedData.budgetMax,
@@ -68,12 +73,17 @@ exports.createLeadFromVoice = async (req, res) => {
     });
 
     await newLead.save();
+    await audit.record(req.user.id, 'create', 'Lead', newLead._id, { after: audit.snapshot(newLead) });
 
     res.status(201).json({
       message: 'Lead captured and structured successfully!',
       lead: newLead,
     });
   } catch (error) {
+    // Surface a meaningful status for AI-specific failures (bad audio, quota…).
+    if (error instanceof AiExtractionError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Error processing voice lead:', error);
     res.status(500).json({ error: 'Failed to process the voice note.' });
   }
@@ -105,10 +115,13 @@ exports.createLead = async (req, res) => {
       contactId: contact._id,
       phoneNumber,
       clientName,
+      source: 'manual',
+      reviewed: true,
       requirements: normaliseRequirements(requirements),
       status,
     });
 
+    await audit.record(req.user.id, 'create', 'Lead', lead._id, { after: audit.snapshot(lead) });
     res.status(201).json({ message: 'Lead created.', lead });
   } catch (error) {
     console.error('Create lead error:', error);
@@ -122,8 +135,13 @@ exports.listLeads = async (req, res) => {
     const query = { agentId: req.user.id };
     if (status) query.status = status;
 
-    const leads = await Lead.find(query).sort({ createdAt: -1 });
-    res.status(200).json({ count: leads.length, leads });
+    const { page, limit, skip } = parsePagination(req.query);
+    const [leads, total] = await Promise.all([
+      Lead.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Lead.countDocuments(query),
+    ]);
+
+    res.status(200).json({ count: leads.length, total, page, limit, leads });
   } catch (error) {
     console.error('List leads error:', error);
     res.status(500).json({ error: 'Failed to fetch leads.' });
@@ -144,15 +162,31 @@ exports.getLead = async (req, res) => {
 
 exports.updateLead = async (req, res) => {
   try {
+    const before = await Lead.findOne({ _id: req.params.id, agentId: req.user.id });
+    if (!before) return res.status(404).json({ error: 'Lead not found.' });
+
     const update = { ...req.body };
-    if (update.requirements) update.requirements = normaliseRequirements(update.requirements);
+    // Any manual edit to the requirements counts as the agent reviewing the
+    // AI-extracted lead.
+    if (update.requirements) {
+      update.requirements = normaliseRequirements(update.requirements);
+      update.reviewed = true;
+    }
+    // Moving to Closed against a specific property records the deal.
+    if (update.status === 'Closed' && update.closedPropertyId === undefined && req.body.propertyId) {
+      update.closedPropertyId = req.body.propertyId;
+    }
 
     const lead = await Lead.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user.id },
       update,
       { new: true, runValidators: true }
     );
-    if (!lead) return res.status(404).json({ error: 'Lead not found.' });
+
+    await audit.record(req.user.id, 'update', 'Lead', lead._id, {
+      before: audit.snapshot(before),
+      after: audit.snapshot(lead),
+    });
     res.status(200).json({ message: 'Lead updated.', lead });
   } catch (error) {
     console.error('Update lead error:', error);
@@ -164,6 +198,10 @@ exports.deleteLead = async (req, res) => {
   try {
     const lead = await Lead.findOneAndDelete({ _id: req.params.id, agentId: req.user.id });
     if (!lead) return res.status(404).json({ error: 'Lead not found.' });
+
+    // Clean up activities that referenced this lead's contact-only? Activities are
+    // tied to contacts, not leads, so nothing to cascade here. Record the delete.
+    await audit.record(req.user.id, 'delete', 'Lead', lead._id, { before: audit.snapshot(lead) });
     res.status(200).json({ message: 'Lead deleted.' });
   } catch (error) {
     console.error('Delete lead error:', error);

@@ -1,6 +1,9 @@
 const Property = require('../models/Property');
-const { extractPropertyFromAudio } = require('../services/geminiService');
+const Activity = require('../models/Activity');
+const { extractPropertyFromAudio, AiExtractionError } = require('../services/geminiService');
 const { findOrCreateContact } = require('../services/contactService');
+const audit = require('../services/auditService');
+const { parsePagination } = require('../utils/query');
 
 // Normalise an incoming location selection ({label, placeId, lat, lng}) into the
 // GeoJSON point our schema expects. Returns undefined when coordinates are absent.
@@ -74,6 +77,9 @@ exports.createProperty = async (req, res) => {
       isAvailable: availabilityFrom(req.body.status, req.body.isAvailable ?? true),
     });
 
+    await audit.record(req.user.id, 'create', 'Property', property._id, {
+      after: audit.snapshot(property),
+    });
     res.status(201).json({ message: 'Property created.', property });
   } catch (error) {
     console.error('Create property error:', error);
@@ -91,8 +97,12 @@ exports.listProperties = async (req, res) => {
     if (listingType) query.listingType = listingType;
     if (available != null) query.isAvailable = available === 'true';
 
-    const properties = await Property.find(query).sort({ createdAt: -1 });
-    res.status(200).json({ count: properties.length, properties });
+    const { page, limit, skip } = parsePagination(req.query);
+    const [properties, total] = await Promise.all([
+      Property.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Property.countDocuments(query),
+    ]);
+    res.status(200).json({ count: properties.length, total, page, limit, properties });
   } catch (error) {
     console.error('List properties error:', error);
     res.status(500).json({ error: 'Failed to fetch properties.' });
@@ -124,12 +134,19 @@ exports.updateProperty = async (req, res) => {
     if ('status' in req.body) update.isAvailable = availabilityFrom(req.body.status);
     else if ('isAvailable' in req.body) update.isAvailable = req.body.isAvailable;
 
+    const before = await Property.findOne({ _id: req.params.id, agentId: req.user.id });
+    if (!before) return res.status(404).json({ error: 'Property not found.' });
+
     const property = await Property.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user.id },
       update,
       { new: true, runValidators: true }
     ).populate('ownerId', 'name phone email roles');
-    if (!property) return res.status(404).json({ error: 'Property not found.' });
+
+    await audit.record(req.user.id, 'update', 'Property', property._id, {
+      before: audit.snapshot(before),
+      after: audit.snapshot(property),
+    });
     res.status(200).json({ message: 'Property updated.', property });
   } catch (error) {
     console.error('Update property error:', error);
@@ -141,6 +158,24 @@ exports.deleteProperty = async (req, res) => {
   try {
     const property = await Property.findOneAndDelete({ _id: req.params.id, agentId: req.user.id });
     if (!property) return res.status(404).json({ error: 'Property not found.' });
+
+    // Cascade: detach this property from any activities that referenced it, and
+    // clear it from any lead recorded as closed against it, so no dangling refs.
+    const Lead = require('../models/Lead');
+    await Promise.all([
+      Activity.updateMany(
+        { agentId: req.user.id, propertyId: property._id },
+        { $unset: { propertyId: '' } }
+      ),
+      Lead.updateMany(
+        { agentId: req.user.id, closedPropertyId: property._id },
+        { $unset: { closedPropertyId: '' } }
+      ),
+    ]);
+
+    await audit.record(req.user.id, 'delete', 'Property', property._id, {
+      before: audit.snapshot(property),
+    });
     res.status(200).json({ message: 'Property deleted.' });
   } catch (error) {
     console.error('Delete property error:', error);
@@ -161,6 +196,9 @@ exports.draftPropertyFromVoice = async (req, res) => {
     const draft = await extractPropertyFromAudio(audioFile.buffer, audioFile.mimetype);
     res.status(200).json({ draft });
   } catch (error) {
+    if (error instanceof AiExtractionError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Property voice draft error:', error);
     res.status(500).json({ error: 'Failed to process the voice note.' });
   }

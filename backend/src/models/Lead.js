@@ -38,10 +38,32 @@ const leadSchema = new mongoose.Schema({
     type: String,
     enum: ['New', 'Contacted', 'Closed'],
     default: 'New'
+  },
+  // How this lead was captured. Voice leads are AI-extracted and start unreviewed
+  // so the UI can prompt the agent to confirm the machine-read requirements.
+  source: {
+    type: String,
+    enum: ['voice', 'manual'],
+    default: 'manual'
+  },
+  // False for AI-extracted leads until the agent confirms/edits the requirements.
+  reviewed: {
+    type: Boolean,
+    default: true
+  },
+  // When a lead is Closed against a specific property, we record which one so the
+  // lead -> property -> deal loop is captured (not just a bare "Closed" status).
+  closedPropertyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Property'
   }
 }, { timestamps: true });
 
 // Enables geospatial "leads wanting an area near this point" queries.
 leadSchema.index({ 'requirements.geo': '2dsphere' });
+// Primary access pattern: an agent's leads, filtered by status, newest first.
+leadSchema.index({ agentId: 1, status: 1, createdAt: -1 });
+// Contact timeline lookups (a contact's requirements).
+leadSchema.index({ agentId: 1, contactId: 1 });
 
 module.exports = mongoose.model('Lead', leadSchema);

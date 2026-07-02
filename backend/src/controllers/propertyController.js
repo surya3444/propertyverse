@@ -53,10 +53,12 @@ function availabilityFrom(status, fallback) {
 // Create a property owned by the logged-in agent.
 exports.createProperty = async (req, res) => {
   try {
-    const { title, price, propertyType, location } = req.body;
+    const { title, propertyType, location, listingType, monthlyRent } = req.body;
+    // For rentals the monthly rent stands in for the (required) price field.
+    const price = req.body.price ?? (listingType === 'Rent' ? monthlyRent : undefined);
     if (!title || price == null || !propertyType || !location) {
       return res.status(400).json({
-        error: 'title, price, propertyType and location are required.',
+        error: 'title, a price (or monthly rent), propertyType and location are required.',
       });
     }
 
@@ -66,6 +68,7 @@ exports.createProperty = async (req, res) => {
     const property = await Property.create({
       agentId: req.user.id,
       ...fields,
+      price,
       ownerId,
       geo: toGeoPoint(req.body.geo),
       isAvailable: availabilityFrom(req.body.status, req.body.isAvailable ?? true),

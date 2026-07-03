@@ -10,6 +10,13 @@ router.use(auth);
 router.get('/', notificationController.listNotifications);
 router.put('/read-all', notificationController.markAllRead);
 router.put('/:id/read', notificationController.markRead);
+
+// Web Push (VAPID) — self-hosted browser push, no Firebase.
+router.get('/vapid-public-key', notificationController.getVapidKey);
+router.post('/subscribe', notificationController.subscribeWebPush);
+router.post('/unsubscribe', notificationController.unsubscribeWebPush);
+
+// FCM device tokens (optional native path).
 router.post('/push-tokens', notificationController.registerPushToken);
 router.delete('/push-tokens/:token', notificationController.unregisterPushToken);
 

@@ -1,6 +1,22 @@
 const mongoose = require('mongoose');
 const geoPointSchema = require('./geoPoint');
 
+// A Cloudinary-hosted asset (photo or document) attached to a property.
+const mediaSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true },
+    publicId: { type: String },
+    resourceType: { type: String }, // 'image' | 'raw'
+    format: { type: String },
+    bytes: { type: Number },
+    width: { type: Number },
+    height: { type: Number },
+    name: { type: String }, // original filename (mainly for documents)
+    mimeType: { type: String },
+  },
+  { _id: false }
+);
+
 const propertySchema = new mongoose.Schema({
   agentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -15,9 +31,23 @@ const propertySchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  // Keep in sync with the frontend PROPERTY_TYPES + the Gemini schema enums.
   propertyType: {
     type: String,
-    enum: ['Apartment', 'Villa', 'Commercial', 'Plot'],
+    enum: [
+      'Apartment',
+      'Independent House',
+      'Villa',
+      'Penthouse',
+      'Studio',
+      'Plot',
+      'Land',
+      'Farmhouse',
+      'Commercial',
+      'Office',
+      'Shop',
+      'Warehouse'
+    ],
     required: true
   },
   // Whether this listing is for sale or rent. `price` is the sale price; for
@@ -67,6 +97,10 @@ const propertySchema = new mongoose.Schema({
   availableFrom: { type: Date },
   description: { type: String },
   amenities: { type: [String], default: [] },
+  // Cloudinary-hosted photos (first is the cover) and documents (floor plans,
+  // agreements, brochures…).
+  images: { type: [mediaSchema], default: [] },
+  documents: { type: [mediaSchema], default: [] },
   // Lifecycle status. `isAvailable` is kept in sync for the existing matching
   // engine (available = actively listed).
   status: {

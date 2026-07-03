@@ -12,6 +12,7 @@ const propertyRoutes = require('./routes/propertyRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const activityRoutes = require('./routes/activityRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/activities', activityRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 // Fallback error handler (e.g. multer file-size errors, CORS rejections).
 app.use((err, req, res, next) => {

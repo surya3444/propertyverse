@@ -55,8 +55,14 @@ exports.createActivity = async (req, res) => {
   }
 };
 
-// Agenda / list. Filters: ?scope=upcoming|today|past, ?status=, ?contactId=,
-// ?propertyId=, or an explicit ?from=&to= ISO range.
+// Agenda / list. Filters: ?scope=overdue|today|upcoming|past, ?status=,
+// ?contactId=, ?propertyId=, or an explicit ?from=&to= ISO range.
+//
+//  - overdue : still Scheduled but the time has passed — needs attention now.
+//              (These stay actionable; they are NOT auto-archived.)
+//  - today   : anything scheduled for the calendar day.
+//  - upcoming: Scheduled and in the future.
+//  - past    : the historical trail (done / cancelled / missed / any past time).
 exports.listActivities = async (req, res) => {
   try {
     const { scope, status, contactId, propertyId, from, to } = req.query;
@@ -70,6 +76,10 @@ exports.listActivities = async (req, res) => {
       query.scheduledAt = {};
       if (from) query.scheduledAt.$gte = new Date(from);
       if (to) query.scheduledAt.$lte = new Date(to);
+    } else if (scope === 'overdue') {
+      // Past-due but the agent hasn't closed it out yet — the "needs action" bucket.
+      query.status = query.status || 'Scheduled';
+      query.scheduledAt = { $lt: now };
     } else if (scope === 'today') {
       const start = new Date(now); start.setHours(0, 0, 0, 0);
       const end = new Date(now); end.setHours(23, 59, 59, 999);
@@ -81,8 +91,9 @@ exports.listActivities = async (req, res) => {
       query.scheduledAt = { $lt: now };
     }
 
-    // Upcoming reads best ascending; everything else newest-first.
-    const sortDir = scope === 'upcoming' ? 1 : -1;
+    // Overdue reads best oldest-first (most stale on top); upcoming ascending;
+    // everything else newest-first.
+    const sortDir = scope === 'upcoming' || scope === 'overdue' ? 1 : -1;
     const { page, limit, skip } = parsePagination(req.query);
     const [activities, total] = await Promise.all([
       Activity.find(query)
@@ -101,18 +112,54 @@ exports.listActivities = async (req, res) => {
   }
 };
 
+// Fetch a single activity (used by the edit form so it can prefill every field).
+exports.getActivity = async (req, res) => {
+  try {
+    const activity = await Activity.findOne({ _id: req.params.id, agentId: req.user.id })
+      .populate('contactId', 'name phone')
+      .populate('propertyId', 'title location');
+    if (!activity) return res.status(404).json({ error: 'Activity not found.' });
+    res.status(200).json({ activity });
+  } catch (error) {
+    console.error('Get activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch activity.' });
+  }
+};
+
 exports.updateActivity = async (req, res) => {
   try {
     const before = await Activity.findOne({ _id: req.params.id, agentId: req.user.id });
     if (!before) return res.status(404).json({ error: 'Activity not found.' });
 
+    const update = { ...req.body };
+
+    // Rescheduling to a future time revives a Missed/Cancelled item back to
+    // Scheduled — unless the caller set an explicit status. This is what makes
+    // "snooze / reschedule" behave the way an agent expects: it's live again.
+    if (update.scheduledAt && update.status === undefined) {
+      const when = new Date(update.scheduledAt);
+      if (when > new Date() && (before.status === 'Missed' || before.status === 'Cancelled')) {
+        update.status = 'Scheduled';
+      }
+    }
+
+    // Marking Done stamps a completion time on the record for the timeline.
+    if (update.status === 'Done' && update.completedAt === undefined) {
+      update.completedAt = new Date();
+    }
+
     const activity = await Activity.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user.id },
-      req.body,
+      update,
       { new: true, runValidators: true }
     )
       .populate('contactId', 'name phone')
       .populate('propertyId', 'title location');
+
+    // Completing/logging a real interaction advances the contact's new leads.
+    if (update.status === 'Done') {
+      await advanceLeadsForContact(req.user.id, String(before.contactId), activity.kind);
+    }
 
     await audit.record(req.user.id, 'update', 'Activity', activity._id, {
       before: audit.snapshot(before),
@@ -139,12 +186,20 @@ exports.deleteActivity = async (req, res) => {
   }
 };
 
-// Sweep: any Scheduled activity whose time has passed is marked Missed. Run on an
-// interval from the server so the agenda reflects reality without manual updates.
+// How long a time-bound event stays "overdue" (actionable) before it is
+// auto-archived as Missed. Follow-ups and Notes are open tasks/records and are
+// NEVER auto-missed — an agent must close them out deliberately. Default 24h.
+const MISS_GRACE_MS = Number(process.env.ACTIVITY_MISS_GRACE_MS) || 24 * 60 * 60 * 1000;
+
+// Sweep: a time-bound Scheduled event (a Visit or Call) whose time passed more
+// than the grace window ago is archived as Missed. This keeps the agenda honest
+// without yanking same-day follow-ups out from under the agent the moment their
+// clock ticks past — those surface in the "Overdue" bucket until acted on.
 exports.markOverdueActivities = async () => {
   try {
+    const cutoff = new Date(Date.now() - MISS_GRACE_MS);
     const res = await Activity.updateMany(
-      { status: 'Scheduled', scheduledAt: { $lt: new Date() } },
+      { status: 'Scheduled', kind: { $in: ['Visit', 'Call'] }, scheduledAt: { $lt: cutoff } },
       { $set: { status: 'Missed' } }
     );
     if (res.modifiedCount) {

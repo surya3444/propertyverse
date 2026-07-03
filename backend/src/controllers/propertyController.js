@@ -2,8 +2,9 @@ const Property = require('../models/Property');
 const Activity = require('../models/Activity');
 const { extractPropertyFromAudio, AiExtractionError } = require('../services/geminiService');
 const { findOrCreateContact } = require('../services/contactService');
+const cloudinaryService = require('../services/cloudinaryService');
 const audit = require('../services/auditService');
-const { parsePagination } = require('../utils/query');
+const { parsePagination, containsRegex } = require('../utils/query');
 
 // Normalise an incoming location selection ({label, placeId, lat, lng}) into the
 // GeoJSON point our schema expects. Returns undefined when coordinates are absent.
@@ -22,6 +23,7 @@ const EDITABLE = [
   'title', 'price', 'propertyType', 'listingType', 'monthlyRent', 'deposit',
   'maintenance', 'location', 'features', 'furnishing', 'floor', 'totalFloors',
   'facing', 'availableFrom', 'description', 'amenities', 'status',
+  'images', 'documents',
 ];
 
 function pickEditable(body) {
@@ -90,12 +92,17 @@ exports.createProperty = async (req, res) => {
 // List the agent's own properties (newest first), with optional filters.
 exports.listProperties = async (req, res) => {
   try {
-    const { propertyType, listingType, available } = req.query;
+    const { propertyType, listingType, available, q } = req.query;
     const query = { agentId: req.user.id };
 
     if (propertyType) query.propertyType = propertyType;
     if (listingType) query.listingType = listingType;
     if (available != null) query.isAvailable = available === 'true';
+    if (q) {
+      // Escaped so a search string can never act as a regex pattern.
+      const rx = containsRegex(q);
+      query.$or = [{ title: rx }, { location: rx }];
+    }
 
     const { page, limit, skip } = parsePagination(req.query);
     const [properties, total] = await Promise.all([
@@ -172,6 +179,15 @@ exports.deleteProperty = async (req, res) => {
         { $unset: { closedPropertyId: '' } }
       ),
     ]);
+
+    // Best-effort: remove the property's hosted photos/documents from Cloudinary
+    // so we don't leak orphaned assets. Never blocks the delete response.
+    const assets = [...(property.images || []), ...(property.documents || [])];
+    Promise.all(
+      assets
+        .filter((m) => m.publicId)
+        .map((m) => cloudinaryService.destroy(m.publicId, m.resourceType || 'image'))
+    ).catch(() => {});
 
     await audit.record(req.user.id, 'delete', 'Property', property._id, {
       before: audit.snapshot(property),

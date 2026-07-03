@@ -25,6 +25,8 @@ const activitySchema = new mongoose.Schema(
       default: 'Follow-up',
     },
     scheduledAt: { type: Date },
+    // When the agent marked this Done — powers the completed-vs-scheduled timeline.
+    completedAt: { type: Date },
     status: {
       type: String,
       enum: ['Scheduled', 'Done', 'Cancelled', 'Missed'],

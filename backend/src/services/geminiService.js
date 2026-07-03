@@ -72,11 +72,28 @@ async function generateStructured({ prompt, audioBase64, mimeType, schema }) {
   throw new AiExtractionError('Voice processing is temporarily unavailable. Please try again.');
 }
 
+// The property kinds we can classify into. Keep in sync with the Property model
+// enum (backend/src/models/Property.js) and the frontend PROPERTY_TYPES.
+const PROPERTY_TYPES = [
+  'Apartment',
+  'Independent House',
+  'Villa',
+  'Penthouse',
+  'Studio',
+  'Plot',
+  'Land',
+  'Farmhouse',
+  'Commercial',
+  'Office',
+  'Shop',
+  'Warehouse',
+];
+
 const LEAD_SCHEMA = {
   type: 'OBJECT',
   properties: {
     budgetMax: { type: 'INTEGER', description: 'Maximum budget extracted as a number. E.g., 500000' },
-    propertyType: { type: 'STRING', enum: ['Apartment', 'Villa', 'Commercial', 'Plot', 'Any'] },
+    propertyType: { type: 'STRING', enum: [...PROPERTY_TYPES, 'Any'] },
     location: { type: 'STRING', description: 'City, neighborhood, or general area' },
     urgency: { type: 'STRING', enum: ['High', 'Medium', 'Low'] },
     clientName: { type: 'STRING', description: 'Name of the client if mentioned in the recording' },
@@ -92,8 +109,7 @@ function sanitizeLead(data) {
     const n = Number(out.budgetMax);
     out.budgetMax = Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
   }
-  const types = ['Apartment', 'Villa', 'Commercial', 'Plot', 'Any'];
-  if (!types.includes(out.propertyType)) out.propertyType = 'Any';
+  if (![...PROPERTY_TYPES, 'Any'].includes(out.propertyType)) out.propertyType = 'Any';
   const urgencies = ['High', 'Medium', 'Low'];
   if (!urgencies.includes(out.urgency)) out.urgency = undefined;
   if (typeof out.location === 'string') out.location = out.location.trim() || undefined;
@@ -115,8 +131,19 @@ const PROPERTY_SCHEMA = {
   type: 'OBJECT',
   properties: {
     title: { type: 'STRING', description: 'A short listing title, e.g. "3 BHK Villa in Gandhi Nagar"' },
-    price: { type: 'INTEGER', description: 'Asking price as a number. Convert lakh/crore to full digits (1 crore = 10000000).' },
-    propertyType: { type: 'STRING', enum: ['Apartment', 'Villa', 'Commercial', 'Plot'] },
+    listingType: {
+      type: 'STRING',
+      enum: ['Sale', 'Rent'],
+      description:
+        'Whether the property is being offered for sale or for rent. Choose "Rent" if the agent mentions rent, lease, monthly, per month, /mo, tenant, or a deposit; otherwise "Sale".',
+    },
+    price: {
+      type: 'INTEGER',
+      description:
+        'The main amount as a number. For a Sale this is the asking price; for a Rent this is the MONTHLY rent. Convert lakh/crore to full digits (1 crore = 10000000, 1 lakh = 100000).',
+    },
+    deposit: { type: 'INTEGER', description: 'Security deposit amount for a rental, if mentioned.' },
+    propertyType: { type: 'STRING', enum: PROPERTY_TYPES },
     location: { type: 'STRING', description: 'City, neighborhood, or general area mentioned' },
     bedrooms: { type: 'INTEGER', description: 'Number of bedrooms / BHK if mentioned' },
     bathrooms: { type: 'INTEGER', description: 'Number of bathrooms if mentioned' },
@@ -128,12 +155,14 @@ const PROPERTY_SCHEMA = {
 
 function sanitizeProperty(data) {
   const out = { ...data };
-  if (out.price != null) {
-    const n = Number(out.price);
-    out.price = Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
+  for (const key of ['price', 'deposit']) {
+    if (out[key] != null) {
+      const n = Number(out[key]);
+      out[key] = Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
+    }
   }
-  const types = ['Apartment', 'Villa', 'Commercial', 'Plot'];
-  if (!types.includes(out.propertyType)) out.propertyType = undefined;
+  if (!['Sale', 'Rent'].includes(out.listingType)) out.listingType = undefined;
+  if (!PROPERTY_TYPES.includes(out.propertyType)) out.propertyType = undefined;
   for (const key of ['bedrooms', 'bathrooms', 'areaSqFt']) {
     if (out[key] != null) {
       const n = Number(out[key]);
@@ -148,7 +177,7 @@ function sanitizeProperty(data) {
 const extractPropertyFromAudio = async (audioBuffer, mimeType) => {
   const data = await generateStructured({
     prompt:
-      "Listen to this real estate agent's voice note describing a property they want to list. Extract the listing details and output them exactly according to the provided JSON schema.",
+      "Listen to this real estate agent's voice note describing a property they want to list. Extract the listing details and output them exactly according to the provided JSON schema. Pay close attention to whether it's for SALE or for RENT: words like rent, lease, monthly, per month, or a security deposit mean it's a rental (listingType 'Rent') and the amount stated is the monthly rent; otherwise treat it as a sale price.",
     audioBase64: audioBuffer.toString('base64'),
     mimeType,
     schema: PROPERTY_SCHEMA,

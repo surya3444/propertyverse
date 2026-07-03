@@ -1,31 +1,16 @@
 [build]
   command = "npm run build"
-  publish = "dist"
 
-# SPA fallback — let React Router handle client-side routes (e.g. /projects/:id)
-# so deep links and refreshes don't 404 in production.
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
-# ── Security headers (#127 / #132) ────────────────────────────────────────────
-# Applied to every response. These are the safe-by-default set that won't break
-# the app. A Content-Security-Policy is drafted below but left commented: enable
-# it only after verifying Firebase Auth/Firestore and Razorpay still work, since
-# a wrong CSP fails silently in the admin.
 [[headers]]
   for = "/*"
   [headers.values]
-    # Keep the whole admin out of search indexes at the edge, not just via meta.
     X-Robots-Tag = "noindex, nofollow, noarchive"
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(self)"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
-    # Cross-Origin-Opener-Policy must stay permissive enough for Firebase Auth
-    # and the Razorpay checkout popup.
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
-    # Draft CSP — uncomment + test before relying on it:
-    # Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.googleapis.com https://www.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://lumberjack.razorpay.com https://api.razorpay.com; frame-src https://checkout.razorpay.com https://api.razorpay.com https://*.firebaseapp.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"

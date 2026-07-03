@@ -1,0 +1,47 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Reading recent calls to pick a number when capturing a requirement.
+         Note: READ_CALL_LOG is a Google Play "restricted" permission and
+         requires a Play Console declaration for production release. -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Detect when a call ends so we can remind the agent to log the lead. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Post the "log this call?" reminder notification (Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="${usesCleartextTraffic}"
+      android:supportsRtl="true">
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustPan"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity>
+
+      <!-- Fires when a call ends — even if the app is backgrounded or killed — so
+           we can remind the agent to log the lead. Needs READ_PHONE_STATE (held
+           by the app) to receive PHONE_STATE broadcasts. -->
+      <receiver
+        android:name=".CallReminderReceiver"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.PHONE_STATE" />
+        </intent-filter>
+      </receiver>
+    </application>
+</manifest>

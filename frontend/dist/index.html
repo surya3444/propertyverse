@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>PropertyVerse</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #root {
+        display: flex;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #faf8f6;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-vP4_1P7H.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Surface any runtime/import error visibly (dev aid).
+      function showErr(msg) {
+        var el = document.getElementById('root');
+        if (el) {
+          el.innerHTML =
+            '<pre style="white-space:pre-wrap;color:#b91c1c;padding:16px;font-size:12px;font-family:monospace">' +
+            String(msg) + '</pre>';
+        }
+      }
+      window.addEventListener('error', function (e) {
+        showErr('ERROR: ' + (e.error && e.error.stack ? e.error.stack : e.message));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        showErr('UNHANDLED REJECTION: ' + (e.reason && e.reason.stack ? e.reason.stack : e.reason));
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+// Web storage — backed by localStorage, wrapped to match the async API.
+export const storage = {
+  getItem: async (key: string) => window.localStorage.getItem(key),
+  setItem: async (key: string, value: string) => {
+    window.localStorage.setItem(key, value);
+  },
+  removeItem: async (key: string) => {
+    window.localStorage.removeItem(key);
+  },
+};

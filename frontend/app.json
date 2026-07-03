@@ -1,0 +1,9 @@
+{
+  "name": "frontend",
+  "displayName": "PropertyVerse",
+  "extra": {
+    "eas": {
+      "projectId": "28081b4a-a341-4282-a38b-e4e1e1cc94e9"
+    }
+  }
+}

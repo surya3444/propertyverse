@@ -31,4 +31,14 @@ const authLimiter = rateLimit({
   message: { error: 'Too many attempts. Please wait and try again.' },
 });
 
-module.exports = { apiLimiter, aiLimiter, authLimiter };
+// Public, unauthenticated form submissions — keyed per IP to blunt spam/abuse of
+// an agent's shared form link while staying generous for legitimate visitors.
+const publicSubmitLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many submissions. Please wait a moment and try again.' },
+});
+
+module.exports = { apiLimiter, aiLimiter, authLimiter, publicSubmitLimiter };

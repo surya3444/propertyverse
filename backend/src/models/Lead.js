@@ -41,10 +41,17 @@ const leadSchema = new mongoose.Schema({
   },
   // How this lead was captured. Voice leads are AI-extracted and start unreviewed
   // so the UI can prompt the agent to confirm the machine-read requirements.
+  // 'form' leads arrive from a public capture form (see Form model) and are
+  // tagged so the agent can tell form-sourced records apart from ones they typed.
   source: {
     type: String,
-    enum: ['voice', 'manual'],
+    enum: ['voice', 'manual', 'form'],
     default: 'manual'
+  },
+  // The public form that produced this lead (only set when source === 'form').
+  formId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Form'
   },
   // False for AI-extracted leads until the agent confirms/edits the requirements.
   reviewed: {

@@ -111,6 +111,19 @@ const propertySchema = new mongoose.Schema({
   isAvailable: {
     type: Boolean,
     default: true
+  },
+  // How this listing was captured. 'form' properties arrive from a public
+  // capture form (see Form model) and are tagged so the agent can tell
+  // form-sourced listings apart from ones they entered themselves.
+  source: {
+    type: String,
+    enum: ['manual', 'form'],
+    default: 'manual'
+  },
+  // The public form that produced this listing (only set when source === 'form').
+  formId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Form'
   }
 }, { timestamps: true });
 

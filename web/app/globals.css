@@ -1,0 +1,218 @@
+:root {
+  /* PropertyVerse brand tokens (mirrors frontend/src/theme). */
+  --pv-primary: #e9591c;
+  --pv-primary-dark: #c6410e;
+  --pv-bg: #faf8f6;
+  --pv-surface: #ffffff;
+  --pv-text: #221e1b;
+  --pv-muted: #78716c;
+  --pv-subtle: #a8a29e;
+  --pv-border: #ece7e1;
+  --pv-danger: #dc2626;
+  --pv-danger-tint: #feecec;
+  /* Accent is overridden per-form via an inline style. */
+  --accent: var(--pv-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--pv-bg);
+  color: var(--pv-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 64px;
+}
+
+/* Warm gradient hero band behind the card. */
+.hero {
+  width: 100%;
+  max-width: 560px;
+  height: 96px;
+  border-radius: 24px 24px 0 0;
+  background: linear-gradient(120deg, #f6a531, #f2931a, #ee7c19, #e9591c, #e53312);
+  margin-bottom: -48px;
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border);
+  border-radius: 24px;
+  padding: 28px 24px;
+  box-shadow: 0 14px 30px rgba(42, 32, 21, 0.1);
+}
+
+.brand {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  margin: 6px 0 4px;
+}
+
+.desc {
+  color: var(--pv-muted);
+  font-size: 15px;
+  margin: 0 0 20px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pv-text);
+  margin-bottom: 6px;
+}
+
+.req {
+  color: var(--accent);
+  margin-left: 2px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--pv-text);
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.button {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 14px;
+  padding: 15px 16px;
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+}
+
+.button:hover {
+  filter: brightness(1.05);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  background: var(--pv-danger-tint);
+  color: var(--pv-danger);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.footer {
+  text-align: center;
+  color: var(--pv-subtle);
+  font-size: 12px;
+  margin-top: 20px;
+}
+
+/* Success state. */
+.success {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+
+.check {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  margin: 0 auto 16px;
+}
+
+/* Skeleton loading placeholders. */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #efeae4 25%,
+    #f6f2ee 37%,
+    #efeae4 63%
+  );
+  background-size: 400% 100%;
+  border-radius: 10px;
+  animation: pv-shimmer 1.4s ease infinite;
+}
+
+@keyframes pv-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.sk-line {
+  height: 14px;
+  margin-bottom: 10px;
+}
+
+.sk-field {
+  height: 46px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}

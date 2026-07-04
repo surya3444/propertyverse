@@ -3,7 +3,7 @@ import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Mic } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonLeadList } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -45,7 +45,7 @@ export function LeadsListScreen({ navigation }: RootScreenProps<'LeadsList'>) {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
         ListEmptyComponent={
           loading ? (
-            <SkeletonList count={6} />
+            <SkeletonLeadList count={6} />
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No leads yet</Text>

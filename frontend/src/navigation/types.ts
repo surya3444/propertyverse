@@ -31,6 +31,8 @@ export type RootStackParamList = {
   FormBuilder: { formId: string };
   FormDetail: { formId: string };
   Notifications: undefined;
+  // Agent-defined custom fields for Property / Lead / Contact.
+  CustomFields: undefined;
   // Optional prefill — e.g. opened from the post-call nudge with the caller's number.
   RecordLead: { phoneNumber?: string; clientName?: string } | undefined;
   ActivityForm:

@@ -195,7 +195,7 @@ function QuickAction({ icon: Icon, label, onPress }: { icon: any; label: string;
       <View style={styles.actionIcon}>
         <Icon size={22} color={colors.primary} strokeWidth={2.2} />
       </View>
-      <Text style={styles.actionLabel}>{label}</Text>
+      <Text style={styles.actionLabel} numberOfLines={2}>{label}</Text>
     </Pressable>
   );
 }
@@ -221,11 +221,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     paddingVertical: spacing.md,
+    paddingHorizontal: 6,
     gap: 8,
   },
   actionPressed: { backgroundColor: colors.primaryTint, transform: [{ scale: 0.98 }] },
   actionIcon: { width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.primaryTint, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { fontSize: 12.5, fontWeight: '700', color: colors.text },
+  actionLabel: { fontSize: 12.5, fontWeight: '700', color: colors.text, textAlign: 'center' },
 
   overdueCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.dangerTint, borderRadius: radius.lg, borderWidth: 1, borderColor: '#F6C6C6', padding: spacing.md, marginTop: spacing.lg },
   overduePressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },

@@ -2,6 +2,7 @@ const Property = require('../models/Property');
 const Activity = require('../models/Activity');
 const { extractPropertyFromAudio, AiExtractionError } = require('../services/geminiService');
 const { findOrCreateContact } = require('../services/contactService');
+const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const cloudinaryService = require('../services/cloudinaryService');
 const audit = require('../services/auditService');
 const { parsePagination, containsRegex } = require('../utils/query');
@@ -70,6 +71,12 @@ exports.createProperty = async (req, res) => {
     const ownerId = await resolveOwner(req.user.id, req.body);
     const fields = pickEditable(req.body);
 
+    // Sanitize agent-defined custom values against the agent's property schema.
+    if (req.body.customFields !== undefined) {
+      const defs = await getFieldDefs(req.user.id, 'property');
+      fields.customFields = sanitizeCustomValues(req.body.customFields, defs);
+    }
+
     const property = await Property.create({
       agentId: req.user.id,
       ...fields,
@@ -131,6 +138,12 @@ exports.getProperty = async (req, res) => {
 exports.updateProperty = async (req, res) => {
   try {
     const update = pickEditable(req.body);
+
+    // Sanitize agent-defined custom values against the agent's property schema.
+    if (req.body.customFields !== undefined) {
+      const defs = await getFieldDefs(req.user.id, 'property');
+      update.customFields = sanitizeCustomValues(req.body.customFields, defs);
+    }
 
     // Location selection → GeoJSON point (or clear it).
     if ('geo' in req.body) update.geo = toGeoPoint(req.body.geo) ?? null;
@@ -209,7 +222,12 @@ exports.draftPropertyFromVoice = async (req, res) => {
       return res.status(400).json({ error: 'An audio file is required.' });
     }
 
-    const draft = await extractPropertyFromAudio(audioFile.buffer, audioFile.mimetype);
+    // Feed the agent's custom property fields into the extraction so the voice
+    // note can populate them too; the draft returns any it filled.
+    const customFieldDefs = await getFieldDefs(req.user.id, 'property');
+    const draft = await extractPropertyFromAudio(
+      audioFile.buffer, audioFile.mimetype, customFieldDefs
+    );
     res.status(200).json({ draft });
   } catch (error) {
     if (error instanceof AiExtractionError) {

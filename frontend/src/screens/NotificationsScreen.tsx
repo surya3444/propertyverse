@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TouchableOpacity
 import { useFocusEffect } from '@react-navigation/native';
 import { Bell, CheckCheck } from 'lucide-react-native';
 import { Screen } from '../components/Screen';
-import { SkeletonList } from '../components/Skeleton';
+import { SkeletonNotificationList } from '../components/Skeleton';
 import { notificationsApi } from '../api/notifications';
 import { AppNotification } from '../types';
 import { colors, radius, spacing, typography } from '../theme';
@@ -84,7 +84,7 @@ export function NotificationsScreen({ navigation }: RootScreenProps<'Notificatio
         ListEmptyComponent={
           loading ? (
             <View style={styles.pad}>
-              <SkeletonList count={5} />
+              <SkeletonNotificationList count={5} />
             </View>
           ) : (
             <View style={styles.empty}>

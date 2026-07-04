@@ -15,6 +15,7 @@ import { FormsListScreen } from '../screens/forms/FormsListScreen';
 import { FormBuilderScreen } from '../screens/forms/FormBuilderScreen';
 import { FormDetailScreen } from '../screens/forms/FormDetailScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { CustomFieldsScreen } from '../screens/settings/CustomFieldsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -44,6 +45,7 @@ export function AppNavigator() {
       <Stack.Screen name="FormBuilder" component={FormBuilderScreen} options={{ title: 'Customize form' }} />
       <Stack.Screen name="FormDetail" component={FormDetailScreen} options={{ title: 'Form' }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <Stack.Screen name="CustomFields" component={CustomFieldsScreen} options={{ title: 'Custom fields' }} />
     </Stack.Navigator>
   );
 }

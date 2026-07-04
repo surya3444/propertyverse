@@ -3,11 +3,12 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { useFocusEffect } from '@react-navigation/native';
 import { Phone, CalendarPlus, Pencil, Building2, Mic, ChevronRight } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonRecordDetail } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Avatar } from '../../components/Avatar';
 import { SectionHeader } from '../../components/SectionHeader';
+import { CustomFieldsDisplay } from '../../components/CustomFieldsEditor';
 import { contactsApi } from '../../api/contacts';
 import { Activity, Contact, ContactRole, Lead, Property, Ref } from '../../types';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -53,7 +54,7 @@ export function ContactDetailScreen({ navigation, route }: RootScreenProps<'Cont
     });
   }, [navigation, contactId]);
 
-  if (loading) return <Screen><SkeletonList count={4} /></Screen>;
+  if (loading) return <Screen><SkeletonRecordDetail /></Screen>;
   if (!contact) return <Screen><Text style={styles.muted}>Contact not found.</Text></Screen>;
 
   const schedule = () => navigation.navigate('ActivityForm', { contactId: contact._id, contactName: contact.name, contactPhone: contact.phone });
@@ -87,6 +88,9 @@ export function ContactDetailScreen({ navigation, route }: RootScreenProps<'Cont
         </View>
 
         {contact.notes ? <Card variant="flat"><Text style={styles.notes}>{contact.notes}</Text></Card> : null}
+
+        <CustomFieldsDisplay entityType="contact" values={contact.customFields} title="More details" />
+
 
         {/* Owned properties */}
         <View style={styles.section}><SectionHeader title={`Properties (${properties.length})`} /></View>

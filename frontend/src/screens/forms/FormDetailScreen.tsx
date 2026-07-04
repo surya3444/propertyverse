@@ -16,7 +16,7 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonFormDetail } from '../../components/Skeleton';
 import { formsApi } from '../../api/forms';
 import { Form, FormResponse } from '../../types';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -113,7 +113,7 @@ export function FormDetailScreen({ navigation, route }: RootScreenProps<'FormDet
   if (loading) {
     return (
       <Screen>
-        <SkeletonList count={4} />
+        <SkeletonFormDetail />
       </Screen>
     );
   }

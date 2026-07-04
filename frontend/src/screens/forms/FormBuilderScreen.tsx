@@ -421,7 +421,7 @@ function ConditionEditor({
 const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl },
   error: { ...typography.caption, color: colors.danger, marginBottom: spacing.sm },
-  multiline: { height: 80, textAlignVertical: 'top', paddingTop: 8 },
+  multiline: { minHeight: 80 },
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',

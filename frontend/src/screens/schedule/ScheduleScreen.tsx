@@ -3,7 +3,7 @@ import { Animated, FlatList, Pressable, RefreshControl, StyleSheet, Text, View }
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, CalendarPlus, Check, Clock, MapPin, RotateCcw, User as UserIcon } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonScheduleList } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { EmptyState } from '../../components/EmptyState';
@@ -161,7 +161,7 @@ export function ScheduleScreen({ navigation }: TabScreenProps<'ScheduleTab'>) {
         refreshControl={<RefreshControl refreshing={loading && items.length > 0} onRefresh={load} tintColor={colors.primary} />}
         ListEmptyComponent={
           loading ? (
-            <SkeletonList count={5} />
+            <SkeletonScheduleList count={5} />
           ) : (
             <EmptyState
               icon={isOverdueScope ? Check : CalendarDays}

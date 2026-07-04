@@ -87,6 +87,27 @@ export interface LeadRequirements {
 }
 
 // A person in the CRM. The same contact can own properties and/or be a buyer/tenant.
+// ---- Agent-defined custom fields ----
+
+export type EntityType = 'property' | 'lead' | 'contact';
+export type CustomFieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'boolean';
+
+// One agent-defined custom field in an entity's schema.
+export interface CustomFieldDef {
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  options?: string[];
+  required?: boolean;
+  order?: number;
+  // Whether the voice AI should try to extract this field.
+  aiExtract?: boolean;
+  aiHint?: string;
+}
+
+// Values stored on a record, keyed by custom field key.
+export type CustomFieldValues = Record<string, string | number | boolean>;
+
 export interface Contact {
   _id: string;
   agentId: string;
@@ -95,6 +116,7 @@ export interface Contact {
   email?: string;
   notes?: string;
   roles: ContactRole[];
+  customFields?: CustomFieldValues;
   createdAt: string;
   updatedAt: string;
 }
@@ -135,6 +157,7 @@ export interface PropertyVoiceDraft {
   bathrooms?: number;
   areaSqFt?: number;
   rawTranscript?: string;
+  customFields?: CustomFieldValues;
 }
 
 export interface Lead {
@@ -155,6 +178,7 @@ export interface Lead {
   reviewed?: boolean;
   // Set when the lead is Closed against a specific property.
   closedPropertyId?: string;
+  customFields?: CustomFieldValues;
   createdAt: string;
   updatedAt: string;
 }
@@ -209,6 +233,7 @@ export interface Property {
   source?: 'manual' | 'form';
   // The public form that produced this listing (when source === 'form').
   formId?: string;
+  customFields?: CustomFieldValues;
   createdAt: string;
   updatedAt: string;
   // Present on match results: relevance 0-100 and distance from the lead's area.

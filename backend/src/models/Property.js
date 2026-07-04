@@ -124,6 +124,13 @@ const propertySchema = new mongoose.Schema({
   formId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Form'
+  },
+  // Agent-defined custom field values (keyed by CustomFieldDef field key). Free
+  // display/AI metadata, not a query surface — sanitized server-side against the
+  // agent's schema (services/customFieldService.js).
+  customFields: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, { timestamps: true });
 

@@ -20,6 +20,12 @@ const contactSchema = new mongoose.Schema(
       enum: ['Owner', 'Buyer', 'Tenant', 'Seller'],
       default: [],
     },
+    // Agent-defined custom field values (keyed by CustomFieldDef field key).
+    // Sanitized server-side against the agent's schema.
+    customFields: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   { timestamps: true }
 );

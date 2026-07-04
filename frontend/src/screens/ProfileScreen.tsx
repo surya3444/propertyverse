@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   FileText,
   Bell,
+  SlidersHorizontal,
   LucideIcon,
 } from 'lucide-react-native';
 import { Screen } from '../components/Screen';
@@ -150,6 +151,15 @@ export function ProfileScreen({ navigation }: TabScreenProps<'ProfileTab'>) {
             title="Notifications"
             subtitle="Form responses & alerts"
             onPress={() => navigation.navigate('Notifications')}
+          />
+          <View style={styles.divider} />
+          <NavRow
+            icon={SlidersHorizontal}
+            tint={colors.primary}
+            bg={colors.primaryTint}
+            title="Custom fields"
+            subtitle="Add your own fields to records"
+            onPress={() => navigation.navigate('CustomFields')}
           />
         </View>
 

@@ -13,6 +13,7 @@ interface InputProps extends TextInputProps {
 export function Input({ label, icon: Icon, error, style, onFocus, onBlur, ...rest }: InputProps) {
   const [focused, setFocused] = useState(false);
   const iconColor = error ? colors.danger : focused ? colors.primary : colors.textSubtle;
+  const multiline = !!rest.multiline;
 
   return (
     <View style={styles.wrapper}>
@@ -20,6 +21,7 @@ export function Input({ label, icon: Icon, error, style, onFocus, onBlur, ...res
       <View
         style={[
           styles.field,
+          multiline && styles.fieldMultiline,
           focused && styles.fieldFocused,
           error && styles.fieldError,
         ]}
@@ -27,7 +29,7 @@ export function Input({ label, icon: Icon, error, style, onFocus, onBlur, ...res
         {Icon ? <Icon size={18} color={iconColor} strokeWidth={2} style={styles.icon} /> : null}
         <TextInput
           placeholderTextColor={colors.textSubtle}
-          style={[styles.input, style]}
+          style={[styles.input, multiline && styles.inputMultiline, style]}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -62,6 +64,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 54,
   },
+  // Multiline (e.g. descriptions): let the box grow with content and top-align,
+  // instead of clipping to the fixed single-line height.
+  fieldMultiline: {
+    height: undefined,
+    minHeight: 54,
+    alignItems: 'stretch',
+    paddingVertical: 10,
+  },
   fieldFocused: {
     borderColor: colors.primary,
     backgroundColor: colors.white,
@@ -84,5 +94,13 @@ const styles = StyleSheet.create({
     height: '100%',
     // Remove the default web focus outline (the field itself shows focus).
     ...(({ outlineStyle: 'none' } as unknown) as object),
+  },
+  // Multiline inputs must not stretch to the parent's height (which would clip
+  // text); they grow with content and align to the top.
+  inputMultiline: {
+    height: undefined,
+    minHeight: 34,
+    textAlignVertical: 'top',
+    paddingTop: 0,
   },
 });

@@ -3,7 +3,7 @@ import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } fr
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, Building2, BedDouble, Maximize, MapPin } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonPropertyList } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { FilterChips } from '../../components/FilterChips';
@@ -60,7 +60,7 @@ export function PropertiesListScreen({ navigation }: TabScreenProps<'PropertiesT
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
         ListEmptyComponent={
           loading ? (
-            <SkeletonList count={5} />
+            <SkeletonPropertyList count={5} />
           ) : (
             <EmptyState
               icon={Building2}

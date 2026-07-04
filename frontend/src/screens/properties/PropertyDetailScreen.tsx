@@ -3,7 +3,8 @@ import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimen
 import { useFocusEffect } from '@react-navigation/native';
 import { Pencil, MapPin, BedDouble, Bath, Maximize, Compass, Building, CalendarPlus, ChevronRight, User as UserIcon, FileText, ImageOff, Download } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonPropertyDetail } from '../../components/Skeleton';
+import { CustomFieldsDisplay } from '../../components/CustomFieldsEditor';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Avatar } from '../../components/Avatar';
@@ -48,7 +49,7 @@ export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'Pro
     });
   }, [navigation, propertyId]);
 
-  if (loading) return <Screen><SkeletonList count={4} /></Screen>;
+  if (loading) return <Screen><SkeletonPropertyDetail /></Screen>;
   if (!property) return <Screen><Text style={styles.muted}>Property not found.</Text></Screen>;
 
   const owner = typeof property.ownerId === 'object' ? (property.ownerId as Contact) : null;
@@ -137,6 +138,9 @@ export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'Pro
             <Card variant="flat"><Text style={styles.desc}>{property.description}</Text></Card>
           </>
         ) : null}
+
+        <CustomFieldsDisplay entityType="property" values={property.customFields} title="More details" />
+
 
         {property.amenities?.length ? (
           <>

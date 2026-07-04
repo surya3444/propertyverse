@@ -8,10 +8,11 @@ import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { LocationPicker } from '../../components/LocationPicker';
 import { ContactPicker, PickedContact } from '../../components/ContactPicker';
+import { CustomFieldsEditor } from '../../components/CustomFieldsEditor';
 import { propertiesApi } from '../../api/properties';
 import { uploadsApi } from '../../api/uploads';
 import { pickFiles, filePickerSupported } from '../../lib/filePicker';
-import { Contact, Furnishing, ListingType, PROPERTY_TYPES, PropertyMedia, PropertyType, SelectedLocation } from '../../types';
+import { Contact, CustomFieldValues, Furnishing, ListingType, PROPERTY_TYPES, PropertyMedia, PropertyType, SelectedLocation } from '../../types';
 import { colors, radius, shadow, spacing, typography } from '../../theme';
 import { haptic } from '../../lib/haptics';
 import { playCue } from '../../lib/sound';
@@ -52,6 +53,7 @@ export function PropertyFormScreen({ navigation, route }: RootScreenProps<'Prope
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [customFields, setCustomFields] = useState<CustomFieldValues>({});
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
 
@@ -95,6 +97,7 @@ export function PropertyFormScreen({ navigation, route }: RootScreenProps<'Prope
         setImages(property.images ?? []);
         setDocuments(property.documents ?? []);
         setIsAvailable(property.isAvailable);
+        setCustomFields(property.customFields ?? {});
       } catch (err: any) {
         Alert.alert('Error', err.message ?? 'Could not load property.');
       } finally {
@@ -138,6 +141,10 @@ export function PropertyFormScreen({ navigation, route }: RootScreenProps<'Prope
       if (draft.bathrooms != null) setBathrooms(String(draft.bathrooms));
       if (draft.areaSqFt != null) setAreaSqFt(String(draft.areaSqFt));
       if (draft.location) { setLocationSeed(draft.location); setOpenLocation((n) => n + 1); }
+      // Merge any AI-filled custom fields over the current values.
+      if (draft.customFields && typeof draft.customFields === 'object') {
+        setCustomFields((prev) => ({ ...prev, ...draft.customFields }));
+      }
     } catch (err: any) {
       Alert.alert('Voice error', err.message ?? 'Could not process the recording.');
     } finally {
@@ -208,6 +215,7 @@ export function PropertyFormScreen({ navigation, route }: RootScreenProps<'Prope
         areaSqFt: areaSqFt ? Number(areaSqFt) : undefined,
       },
       isAvailable,
+      customFields,
     };
     if (listingType === 'Rent') {
       payload.monthlyRent = Number(monthlyRent);
@@ -398,6 +406,9 @@ export function PropertyFormScreen({ navigation, route }: RootScreenProps<'Prope
           </Pressable>
         </Section>
 
+        {/* Agent-defined custom fields (renders nothing if none configured). */}
+        <CustomFieldsSection entityType="property" values={customFields} onChange={setCustomFields} />
+
         {/* Description & availability */}
         <Section icon={FileText} title="Description & status">
           <Input value={description} onChangeText={setDescription} placeholder="Highlights, nearby landmarks, condition…" multiline />
@@ -420,6 +431,33 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Wraps the shared CustomFieldsEditor in a titled Section, but renders nothing
+// until we know the agent actually has custom fields for this entity type (so no
+// empty "More details" header appears).
+function CustomFieldsSection({
+  entityType,
+  values,
+  onChange,
+}: {
+  entityType: 'property' | 'lead' | 'contact';
+  values: CustomFieldValues;
+  onChange: (v: CustomFieldValues) => void;
+}) {
+  const [hasFields, setHasFields] = useState(false);
+  return (
+    <View style={hasFields ? undefined : styles.hidden}>
+      <Section icon={ListChecks} title="More details">
+        <CustomFieldsEditor
+          entityType={entityType}
+          values={values}
+          onChange={onChange}
+          onSchemaLoaded={(fields) => setHasFields(fields.length > 0)}
+        />
+      </Section>
+    </View>
+  );
 }
 
 function Section({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
@@ -492,4 +530,5 @@ const styles = StyleSheet.create({
   switchLabel: { fontSize: 15.5, fontWeight: '600', color: colors.text },
   switchHint: { fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
   muted: { fontSize: 14, color: colors.textMuted },
+  hidden: { display: 'none' },
 });

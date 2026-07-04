@@ -3,6 +3,7 @@ const Property = require('../models/Property');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { findOrCreateContact } = require('../services/contactService');
+const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const audit = require('../services/auditService');
 const { parsePagination, containsRegex } = require('../utils/query');
 
@@ -14,10 +15,17 @@ exports.createContact = async (req, res) => {
       return res.status(400).json({ error: 'A name or phone is required.' });
     }
     const contact = await findOrCreateContact(req.user.id, { name, phone, email, role });
+    let dirty = false;
     if (notes && !contact.notes) {
       contact.notes = notes;
-      await contact.save();
+      dirty = true;
     }
+    if (req.body.customFields !== undefined) {
+      const defs = await getFieldDefs(req.user.id, 'contact');
+      contact.customFields = sanitizeCustomValues(req.body.customFields, defs);
+      dirty = true;
+    }
+    if (dirty) await contact.save();
     await audit.record(req.user.id, 'create', 'Contact', contact._id, {
       after: audit.snapshot(contact),
     });
@@ -76,9 +84,17 @@ exports.updateContact = async (req, res) => {
     const before = await Contact.findOne({ _id: req.params.id, agentId: req.user.id });
     if (!before) return res.status(404).json({ error: 'Contact not found.' });
 
+    const update = { ...req.body };
+    // Sanitize custom values against the agent's contact schema (never trust keys).
+    if (update.customFields !== undefined) {
+      update.customFields = sanitizeCustomValues(
+        update.customFields, await getFieldDefs(req.user.id, 'contact')
+      );
+    }
+
     const contact = await Contact.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user.id },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     await audit.record(req.user.id, 'update', 'Contact', contact._id, {

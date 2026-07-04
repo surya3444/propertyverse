@@ -2,6 +2,7 @@ const Lead = require('../models/Lead');
 const { extractLeadFromAudio, AiExtractionError } = require('../services/geminiService');
 const locationService = require('../services/locationService');
 const { findOrCreateContact } = require('../services/contactService');
+const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const audit = require('../services/auditService');
 const { parsePagination } = require('../utils/query');
 
@@ -31,8 +32,12 @@ exports.createLeadFromVoice = async (req, res) => {
       return res.status(400).json({ error: 'Phone number and audio file are required.' });
     }
 
-    // 1. Send the audio buffer to Gemini for extraction.
-    const extractedData = await extractLeadFromAudio(audioFile.buffer, audioFile.mimetype);
+    // 1. Send the audio buffer to Gemini for extraction, feeding in the agent's
+    //    custom lead fields so the voice note can populate them too.
+    const customFieldDefs = await getFieldDefs(req.user.id, 'lead');
+    const extractedData = await extractLeadFromAudio(
+      audioFile.buffer, audioFile.mimetype, customFieldDefs
+    );
 
     // 2. Best-effort geocode of the spoken location so the lead is immediately
     //    matchable. The agent can still refine to the exact area afterwards.
@@ -70,6 +75,7 @@ exports.createLeadFromVoice = async (req, res) => {
         urgency: extractedData.urgency,
         rawAudioTranscript: extractedData.rawTranscript,
       },
+      customFields: sanitizeCustomValues(extractedData.customFields, customFieldDefs),
     });
 
     await newLead.save();
@@ -119,6 +125,10 @@ exports.createLead = async (req, res) => {
       reviewed: true,
       requirements: normaliseRequirements(requirements),
       status,
+      customFields:
+        req.body.customFields !== undefined
+          ? sanitizeCustomValues(req.body.customFields, await getFieldDefs(req.user.id, 'lead'))
+          : undefined,
     });
 
     await audit.record(req.user.id, 'create', 'Lead', lead._id, { after: audit.snapshot(lead) });
@@ -166,6 +176,12 @@ exports.updateLead = async (req, res) => {
     if (!before) return res.status(404).json({ error: 'Lead not found.' });
 
     const update = { ...req.body };
+    // Sanitize custom values against the agent's lead schema (never trust keys).
+    if (update.customFields !== undefined) {
+      update.customFields = sanitizeCustomValues(
+        update.customFields, await getFieldDefs(req.user.id, 'lead')
+      );
+    }
     // Any manual edit to the requirements counts as the agent reviewing the
     // AI-extracted lead.
     if (update.requirements) {

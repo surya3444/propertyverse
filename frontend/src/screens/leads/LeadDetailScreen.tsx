@@ -2,14 +2,16 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CalendarPlus, ChevronRight, Pencil, X } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonRecordDetail } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { LocationPicker } from '../../components/LocationPicker';
+import { CustomFieldsEditor, CustomFieldsDisplay } from '../../components/CustomFieldsEditor';
 import { leadsApi } from '../../api/leads';
 import {
+  CustomFieldValues,
   Lead,
   LeadStatus,
   Property,
@@ -43,6 +45,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
   const [edBudget, setEdBudget] = useState('');
   const [edType, setEdType] = useState<RequirementType>('Any');
   const [edUrgency, setEdUrgency] = useState<Urgency | undefined>();
+  const [edCustom, setEdCustom] = useState<CustomFieldValues>({});
 
   const load = useCallback(async () => {
     try {
@@ -105,6 +108,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
     setEdBudget(r.budgetMax != null ? String(r.budgetMax) : '');
     setEdType(r.propertyType ?? 'Any');
     setEdUrgency(r.urgency);
+    setEdCustom(lead?.customFields ?? {});
     setEditingReq(true);
   }, [lead]);
 
@@ -120,6 +124,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
           propertyType: edType,
           urgency: edUrgency,
         },
+        customFields: edCustom,
       });
       setLead(res.lead);
       setEditingReq(false);
@@ -128,12 +133,12 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
     } finally {
       setSavingReq(false);
     }
-  }, [lead, edTxn, edBudget, edType, edUrgency]);
+  }, [lead, edTxn, edBudget, edType, edUrgency, edCustom]);
 
   if (loading) {
     return (
       <Screen>
-        <SkeletonList count={4} />
+        <SkeletonRecordDetail />
       </Screen>
     );
   }
@@ -232,6 +237,8 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
                 ))}
               </View>
 
+              <CustomFieldsEditor entityType="lead" values={edCustom} onChange={setEdCustom} />
+
               <Button title="Save requirements" onPress={saveReq} loading={savingReq} style={styles.saveReqBtn} />
             </View>
           ) : (
@@ -254,6 +261,10 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
             </>
           )}
         </Card>
+
+        {!editingReq ? (
+          <CustomFieldsDisplay entityType="lead" values={lead.customFields} title="More details" />
+        ) : null}
 
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Desired area</Text>

@@ -63,6 +63,12 @@ const leadSchema = new mongoose.Schema({
   closedPropertyId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Property'
+  },
+  // Agent-defined custom field values (keyed by CustomFieldDef field key).
+  // Sanitized server-side against the agent's schema.
+  customFields: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, { timestamps: true });
 

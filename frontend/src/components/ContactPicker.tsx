@@ -12,6 +12,7 @@ import {
 import { Search, X, UserPlus, Check, User as UserIcon } from 'lucide-react-native';
 import { contactsApi } from '../api/contacts';
 import { Avatar } from './Avatar';
+import { CallLogPicker } from './CallLogPicker';
 import { Contact } from '../types';
 import { colors, radius, spacing, typography } from '../theme';
 import { haptic } from '../lib/haptics';
@@ -111,7 +112,17 @@ export function ContactPicker({ label, value, onChange, placeholder, error }: Pr
 
             {creating ? (
               <View>
-                <TextInput value={newName} onChangeText={setNewName} placeholder="Full name" placeholderTextColor={colors.textSubtle} style={styles.plainInput} autoFocus />
+                {/* Prefill from a recent call: phone always, name only when the
+                    call has one and the field is still empty (untouched = kept). */}
+                <View style={styles.callLogRow}>
+                  <CallLogPicker
+                    onPick={(call) => {
+                      setNewPhone(call.phoneNumber);
+                      if (call.name) setNewName((prev) => (prev.trim() ? prev : call.name!));
+                    }}
+                  />
+                </View>
+                <TextInput value={newName} onChangeText={setNewName} placeholder="Full name" placeholderTextColor={colors.textSubtle} style={styles.plainInput} />
                 <TextInput value={newPhone} onChangeText={setNewPhone} placeholder="Phone" placeholderTextColor={colors.textSubtle} style={styles.plainInput} keyboardType="phone-pad" />
                 <Pressable onPress={createNew} style={styles.createBtn} disabled={saving}>
                   {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.createBtnText}>Save contact</Text>}
@@ -169,6 +180,7 @@ const styles = StyleSheet.create({
 
   searchField: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 50 },
   searchInput: { flex: 1, fontSize: 16, color: colors.text, height: '100%', ...(({ outlineStyle: 'none' } as unknown) as object) },
+  callLogRow: { marginBottom: spacing.sm },
   plainInput: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 52, fontSize: 16, color: colors.text, marginBottom: spacing.sm, ...(({ outlineStyle: 'none' } as unknown) as object) },
   createBtn: { height: 50, borderRadius: radius.md, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xs },
   createBtnText: { color: colors.white, fontWeight: '700', fontSize: 16 },

@@ -6,7 +6,7 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonFormList } from '../../components/Skeleton';
 import { formsApi } from '../../api/forms';
 import { Form, FormType } from '../../types';
 import { colors, spacing, typography } from '../../theme';
@@ -65,7 +65,7 @@ export function FormsListScreen({ navigation }: RootScreenProps<'FormsList'>) {
         ListEmptyComponent={
           loading ? (
             <View style={styles.pad}>
-              <SkeletonList count={4} />
+              <SkeletonFormList count={4} />
             </View>
           ) : (
             <View style={styles.empty}>

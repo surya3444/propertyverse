@@ -102,6 +102,61 @@ const LEAD_SCHEMA = {
   required: ['budgetMax', 'propertyType', 'location', 'urgency'],
 };
 
+// Map an agent-defined custom field to a Gemini schema property. Only fields
+// flagged aiExtract are included by the caller. Returns [key, propertySchema].
+function customFieldToProp(field) {
+  const description = field.aiHint || field.label;
+  switch (field.type) {
+    case 'number':
+      return [field.key, { type: 'NUMBER', description }];
+    case 'boolean':
+      return [field.key, { type: 'BOOLEAN', description }];
+    case 'select':
+      return [
+        field.key,
+        field.options && field.options.length
+          ? { type: 'STRING', enum: field.options, description }
+          : { type: 'STRING', description },
+      ];
+    case 'date':
+    case 'text':
+    case 'textarea':
+    default:
+      return [field.key, { type: 'STRING', description }];
+  }
+}
+
+// Build a nested `customFields` OBJECT property from the agent's schema so the
+// model returns custom answers separate from the built-in ones. Returns null
+// when there are no AI-extractable custom fields.
+function buildCustomFieldsProp(fieldDefs = []) {
+  const props = {};
+  for (const f of fieldDefs) {
+    if (f && f.aiExtract !== false && f.key && f.label) {
+      const [key, schema] = customFieldToProp(f);
+      props[key] = schema;
+    }
+  }
+  if (!Object.keys(props).length) return null;
+  return {
+    type: 'OBJECT',
+    description:
+      'Additional agent-defined details. Only fill a field when the recording clearly mentions it; otherwise omit it.',
+    properties: props,
+  };
+}
+
+// Clone a base schema and inject a `customFields` property built from the agent's
+// custom field definitions (no-op when there are none).
+function withCustomFields(baseSchema, fieldDefs) {
+  const custom = buildCustomFieldsProp(fieldDefs);
+  if (!custom) return baseSchema;
+  return {
+    ...baseSchema,
+    properties: { ...baseSchema.properties, customFields: custom },
+  };
+}
+
 // Clamp/normalise AI output so obviously-bad values never reach the database.
 function sanitizeLead(data) {
   const out = { ...data };
@@ -116,15 +171,19 @@ function sanitizeLead(data) {
   return out;
 }
 
-const extractLeadFromAudio = async (audioBuffer, mimeType) => {
+const extractLeadFromAudio = async (audioBuffer, mimeType, customFieldDefs = []) => {
   const data = await generateStructured({
     prompt:
-      "Listen to this real estate agent's voice note. Extract the client's requirements and output them exactly according to the provided JSON schema.",
+      "Listen to this real estate agent's voice note. Extract the client's requirements and output them exactly according to the provided JSON schema. If the schema includes a 'customFields' object, fill only the sub-fields the recording clearly mentions.",
     audioBase64: audioBuffer.toString('base64'),
     mimeType,
-    schema: LEAD_SCHEMA,
+    schema: withCustomFields(LEAD_SCHEMA, customFieldDefs),
   });
-  return sanitizeLead(data);
+  const out = sanitizeLead(data);
+  // Pass custom answers through untouched; authoritative coercion happens in the
+  // controller against the agent's schema (services/customFieldService.js).
+  if (data.customFields && typeof data.customFields === 'object') out.customFields = data.customFields;
+  return out;
 };
 
 const PROPERTY_SCHEMA = {
@@ -174,15 +233,17 @@ function sanitizeProperty(data) {
   return out;
 }
 
-const extractPropertyFromAudio = async (audioBuffer, mimeType) => {
+const extractPropertyFromAudio = async (audioBuffer, mimeType, customFieldDefs = []) => {
   const data = await generateStructured({
     prompt:
-      "Listen to this real estate agent's voice note describing a property they want to list. Extract the listing details and output them exactly according to the provided JSON schema. Pay close attention to whether it's for SALE or for RENT: words like rent, lease, monthly, per month, or a security deposit mean it's a rental (listingType 'Rent') and the amount stated is the monthly rent; otherwise treat it as a sale price.",
+      "Listen to this real estate agent's voice note describing a property they want to list. Extract the listing details and output them exactly according to the provided JSON schema. Pay close attention to whether it's for SALE or for RENT: words like rent, lease, monthly, per month, or a security deposit mean it's a rental (listingType 'Rent') and the amount stated is the monthly rent; otherwise treat it as a sale price. If the schema includes a 'customFields' object, fill only the sub-fields the recording clearly mentions.",
     audioBase64: audioBuffer.toString('base64'),
     mimeType,
-    schema: PROPERTY_SCHEMA,
+    schema: withCustomFields(PROPERTY_SCHEMA, customFieldDefs),
   });
-  return sanitizeProperty(data);
+  const out = sanitizeProperty(data);
+  if (data.customFields && typeof data.customFields === 'object') out.customFields = data.customFields;
+  return out;
 };
 
 module.exports = { extractLeadFromAudio, extractPropertyFromAudio, AiExtractionError };

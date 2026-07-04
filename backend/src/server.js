@@ -16,6 +16,7 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const formRoutes = require('./routes/formRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const customFieldRoutes = require('./routes/customFieldRoutes');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/forms', formRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/custom-fields', customFieldRoutes);
 // Unauthenticated form submissions from the public Next.js web app. In
 // production add that app's origin to CORS_ORIGINS so browsers can post here.
 app.use('/api/public', publicRoutes);

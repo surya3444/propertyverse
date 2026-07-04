@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { useFocusEffect } from '@react-navigation/native';
 import { Search, UserPlus, Users, ChevronRight, Phone } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
-import { SkeletonList } from '../../components/Skeleton';
+import { SkeletonContactList } from '../../components/Skeleton';
 import { Card } from '../../components/Card';
 import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
@@ -88,7 +88,7 @@ export function ContactsListScreen({ navigation }: TabScreenProps<'ContactsTab'>
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           loading ? (
-            <SkeletonList count={6} />
+            <SkeletonContactList count={6} />
           ) : (
             <EmptyState
               icon={Users}

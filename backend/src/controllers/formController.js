@@ -7,20 +7,42 @@ const { parsePagination } = require('../utils/query');
 // are server-owned).
 const EDITABLE = ['title', 'description', 'accentColor', 'isActive', 'fields'];
 
+const VISIBLE_OPERATORS = ['equals', 'notEquals', 'in', 'notIn'];
+const FILE_ACCEPT = ['image', 'document', 'any'];
+
+// Keep a conditional-visibility rule only when it references a real field key and
+// carries a valid operator; otherwise drop it (field then always shows).
+function sanitizeVisibleWhen(vw, keys) {
+  if (!vw || typeof vw !== 'object') return undefined;
+  if (!vw.field || !keys.has(vw.field)) return undefined;
+  const operator = VISIBLE_OPERATORS.includes(vw.operator) ? vw.operator : 'equals';
+  const values = Array.isArray(vw.values) ? vw.values.map((v) => String(v)) : [];
+  return { field: vw.field, operator, values };
+}
+
 // Normalise an incoming fields array: keep only known props and re-index order.
 function sanitizeFields(fields) {
   if (!Array.isArray(fields)) return undefined;
-  return fields.map((f, i) => ({
-    key: f.key,
-    label: f.label,
-    type: f.type || 'text',
-    required: !!f.required,
-    enabled: f.enabled !== false,
-    order: typeof f.order === 'number' ? f.order : i,
-    options: Array.isArray(f.options) ? f.options.filter((o) => typeof o === 'string') : [],
-    placeholder: f.placeholder,
-    custom: !!f.custom,
-  }));
+  const keys = new Set(fields.map((f) => f && f.key).filter(Boolean));
+  return fields.map((f, i) => {
+    const field = {
+      key: f.key,
+      label: f.label,
+      type: f.type || 'text',
+      required: !!f.required,
+      enabled: f.enabled !== false,
+      order: typeof f.order === 'number' ? f.order : i,
+      options: Array.isArray(f.options) ? f.options.filter((o) => typeof o === 'string') : [],
+      placeholder: f.placeholder,
+      custom: !!f.custom,
+      visibleWhen: sanitizeVisibleWhen(f.visibleWhen, keys),
+    };
+    if (field.type === 'file') {
+      field.accept = FILE_ACCEPT.includes(f.accept) ? f.accept : 'image';
+      field.multiple = !!f.multiple;
+    }
+    return field;
+  });
 }
 
 function pickEditable(body) {

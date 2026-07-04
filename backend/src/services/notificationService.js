@@ -1,5 +1,6 @@
 const Notification = require('../models/Notification');
 const pushService = require('./pushService');
+const notificationStream = require('./notificationStream');
 
 // Raise a notification for a new public form submission: persist the in-app
 // notification (surfaced by the bell/badge) and best-effort push it to the
@@ -23,17 +24,20 @@ async function notifyFormResponse(agentId, { form, response, entityType, entityI
       entityId,
     });
 
-    await pushService.sendToAgent(agentId, {
-      title,
-      body,
-      data: {
-        type: 'form_response',
-        notificationId: notification._id.toString(),
-        entityType: entityType || '',
-        entityId: entityId ? entityId.toString() : '',
-        formId: form._id.toString(),
-      },
-    });
+    const data = {
+      type: 'form_response',
+      notificationId: notification._id.toString(),
+      entityType: entityType || '',
+      entityId: entityId ? entityId.toString() : '',
+      formId: form._id.toString(),
+    };
+
+    // Primary self-hosted transport: real-time SSE to the agent's devices
+    // (native foreground service / web). In-memory + best-effort.
+    notificationStream.publish(agentId, { title, body, data });
+
+    // Also fan out via Web Push (VAPID) for PWA/browsers that subscribed.
+    await pushService.sendToAgent(agentId, { title, body, data });
     return notification;
   } catch (err) {
     console.warn('[notify] notifyFormResponse failed:', err.message);

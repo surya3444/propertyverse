@@ -1,7 +1,55 @@
+const jwt = require('jsonwebtoken');
 const Notification = require('../models/Notification');
 const PushToken = require('../models/PushToken');
 const { getVapidPublicKey } = require('../services/pushService');
+const notificationStream = require('../services/notificationStream');
 const { parsePagination } = require('../utils/query');
+
+// GET /api/notifications/stream — the self-hosted real-time push channel (SSE).
+// The Android foreground service (and the web app) hold this open and receive a
+// `notification` event per new notification. Auth is inline (not the shared
+// middleware) so it can accept a token via the Authorization header (native /
+// fetch) OR a `?token=` query param (browser EventSource, which can't set
+// headers). Excluded from the JSON body path; it never closes until the client
+// disconnects.
+exports.streamNotifications = (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
+  let agentId;
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    agentId = payload.sub;
+  } catch (_) {
+    return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    // Disable proxy buffering (nginx) so events flush immediately.
+    'X-Accel-Buffering': 'no',
+  });
+  // Ask the client to reconnect after 5s if the stream drops; open with a comment.
+  res.write('retry: 5000\n\n');
+  res.write(': connected\n\n');
+
+  const remove = notificationStream.addClient(agentId, res);
+
+  // Heartbeat comment keeps the connection alive through idle proxy timeouts.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch (_) {
+      /* cleaned up on close */
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    remove();
+  });
+};
 
 // GET /api/notifications — the agent's notifications (newest first) + unread count.
 exports.listNotifications = async (req, res) => {

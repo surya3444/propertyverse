@@ -1,6 +1,23 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
+// A conditional-visibility rule: the field it lives on is shown only when the
+// answer to `field` (another field's key) satisfies `operator` against `values`.
+// Absent = the field always shows. Enforced authoritatively on the backend
+// (services/formService.js isFieldVisible) and mirrored live in the web form.
+const visibleWhenSchema = new mongoose.Schema(
+  {
+    field: { type: String, required: true },
+    operator: {
+      type: String,
+      enum: ['equals', 'notEquals', 'in', 'notIn'],
+      default: 'equals',
+    },
+    values: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 // A single question on a capture form. `key` identifies the field: known keys map
 // to Lead/Property/Contact fields (see services/formService.js); `custom: true`
 // fields are free-form questions whose answers are stored on the response and
@@ -11,7 +28,7 @@ const formFieldSchema = new mongoose.Schema(
     label: { type: String, required: true },
     type: {
       type: String,
-      enum: ['text', 'tel', 'email', 'number', 'select', 'textarea'],
+      enum: ['text', 'tel', 'email', 'number', 'select', 'textarea', 'file'],
       default: 'text',
     },
     required: { type: Boolean, default: false },
@@ -24,6 +41,15 @@ const formFieldSchema = new mongoose.Schema(
     placeholder: { type: String },
     // True for agent-added questions that don't map to a model field.
     custom: { type: Boolean, default: false },
+    // For `file` fields: what may be uploaded, and whether more than one.
+    accept: {
+      type: String,
+      enum: ['image', 'document', 'any'],
+      default: 'image',
+    },
+    multiple: { type: Boolean, default: false },
+    // Optional conditional visibility (see visibleWhenSchema above).
+    visibleWhen: { type: visibleWhenSchema, default: undefined },
   },
   { _id: false }
 );

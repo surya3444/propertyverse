@@ -17,6 +17,11 @@ function publicShape(form, agentName) {
       required: f.required,
       options: f.options,
       placeholder: f.placeholder,
+      accept: f.type === 'file' ? f.accept || 'image' : undefined,
+      multiple: f.type === 'file' ? !!f.multiple : undefined,
+      visibleWhen: f.visibleWhen
+        ? { field: f.visibleWhen.field, operator: f.visibleWhen.operator, values: f.visibleWhen.values }
+        : undefined,
     }));
   return {
     publicId: form.publicId,
@@ -53,7 +58,7 @@ exports.submitPublicForm = async (req, res) => {
     }
 
     const data = req.body && typeof req.body === 'object' ? req.body.data || req.body : {};
-    const { values, custom } = formService.mapSubmission(form, data);
+    const { values, custom, media } = formService.mapSubmission(form, data);
 
     let entityType;
     let entityId;
@@ -62,7 +67,7 @@ exports.submitPublicForm = async (req, res) => {
 
     if (form.type === 'property') {
       const { ownerId, property } = await formService.applyPropertySubmission(
-        form.agentId, form, values, custom
+        form.agentId, form, values, custom, media
       );
       entityType = 'Property';
       entityId = property._id;
@@ -70,7 +75,7 @@ exports.submitPublicForm = async (req, res) => {
       personName = values.ownerName;
     } else {
       const { contact, lead } = await formService.applyLeadSubmission(
-        form.agentId, form, values, custom
+        form.agentId, form, values, custom, media
       );
       entityType = 'Lead';
       entityId = lead._id;

@@ -41,4 +41,14 @@ const publicSubmitLimiter = rateLimit({
   message: { error: 'Too many submissions. Please wait a moment and try again.' },
 });
 
-module.exports = { apiLimiter, aiLimiter, authLimiter, publicSubmitLimiter };
+// Public, unauthenticated file uploads for a form. Tighter than submit because
+// each request can carry several files straight to Cloudinary.
+const publicUploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // files come in batches; a legit submitter may retry a few times
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many uploads. Please wait a moment and try again.' },
+});
+
+module.exports = { apiLimiter, aiLimiter, authLimiter, publicSubmitLimiter, publicUploadLimiter };

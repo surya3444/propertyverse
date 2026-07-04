@@ -69,24 +69,91 @@ async function ensureDefaultForms(agentId) {
   ]);
 }
 
-// A missing/blank answer.
-const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+// A missing/blank answer. File answers are arrays — blank when empty.
+const isBlank = (v) => {
+  if (Array.isArray(v)) return v.length === 0;
+  return v === undefined || v === null || String(v).trim() === '';
+};
 
-// Validate a public submission against a form's enabled fields and split the
-// answers into mapped values (by key) and custom answers ({label, value}).
-// Throws a plain Error (message = user-facing) when a required field is missing.
+// Evaluate a field's optional `visibleWhen` rule against the current answers.
+// No rule = always visible. Comparison is string-based (answers come in as
+// strings from the public form). Used to skip hidden fields on submit so a
+// hidden required field is never "missing" and a hidden answer is never stored.
+function isFieldVisible(field, values = {}) {
+  const rule = field.visibleWhen;
+  if (!rule || !rule.field) return true;
+  const raw = values[rule.field];
+  const current = raw === undefined || raw === null ? '' : String(raw).trim();
+  const set = Array.isArray(rule.values) ? rule.values.map((v) => String(v)) : [];
+  switch (rule.operator) {
+    case 'notEquals':
+      return current !== (set[0] ?? '');
+    case 'in':
+      return set.includes(current);
+    case 'notIn':
+      return !set.includes(current);
+    case 'equals':
+    default:
+      return current === (set[0] ?? '');
+  }
+}
+
+// A media descriptor uploaded via the public upload endpoint. We only trust the
+// server-generated fields (a Cloudinary secure_url + public_id); everything else
+// is cosmetic. Drops anything that isn't a plausible descriptor.
+function sanitizeMedia(raw) {
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list
+    .filter((m) => m && typeof m === 'object' && typeof m.url === 'string' && /^https:\/\//.test(m.url))
+    .map((m) => ({
+      url: m.url,
+      publicId: typeof m.publicId === 'string' ? m.publicId : undefined,
+      resourceType: typeof m.resourceType === 'string' ? m.resourceType : undefined,
+      format: typeof m.format === 'string' ? m.format : undefined,
+      bytes: typeof m.bytes === 'number' ? m.bytes : undefined,
+      width: typeof m.width === 'number' ? m.width : undefined,
+      height: typeof m.height === 'number' ? m.height : undefined,
+      name: typeof m.name === 'string' ? m.name : undefined,
+      mimeType: typeof m.mimeType === 'string' ? m.mimeType : undefined,
+    }));
+}
+
+// Validate a public submission against a form's enabled + visible fields and
+// split the answers into mapped values (by key), custom answers ({label,value}),
+// and uploaded media grouped by accept kind. Throws a plain Error (message =
+// user-facing) when a required, visible field is missing.
 function mapSubmission(form, data = {}) {
   const values = {};
   const custom = [];
   const missing = [];
+  // Media collected from `file` fields, grouped for the property media arrays.
+  const media = { image: [], document: [] };
 
   for (const field of form.fields) {
     if (!field.enabled) continue;
+    // Hidden-by-condition fields are dropped entirely (not required, not stored).
+    if (!isFieldVisible(field, data)) continue;
     const raw = data[field.key];
     if (isBlank(raw)) {
       if (field.required) missing.push(field.label);
       continue;
     }
+
+    if (field.type === 'file') {
+      const files = sanitizeMedia(raw);
+      if (!files.length) {
+        if (field.required) missing.push(field.label);
+        continue;
+      }
+      const bucket = field.accept === 'document' ? 'document' : 'image';
+      media[bucket].push(...files);
+      // Custom file questions still get a readable link block in notes.
+      if (field.custom) {
+        custom.push({ label: field.label, value: files.map((f) => f.url).join(', ') });
+      }
+      continue;
+    }
+
     const value = typeof raw === 'string' ? raw.trim() : raw;
     if (field.custom) custom.push({ label: field.label, value });
     else values[field.key] = value;
@@ -97,7 +164,7 @@ function mapSubmission(form, data = {}) {
     err.status = 400;
     throw err;
   }
-  return { values, custom };
+  return { values, custom, media };
 }
 
 // Render custom answers as a readable block appended to notes/description.
@@ -108,8 +175,15 @@ function customBlock(custom) {
 
 const num = (v) => (isBlank(v) ? undefined : Number(v));
 
+// A readable "Attachments:" block for records that have no media array (leads).
+function mediaBlock(media) {
+  const all = [...(media?.image || []), ...(media?.document || [])];
+  if (!all.length) return '';
+  return `Attachments:\n${all.map((m) => `- ${m.name || m.url}: ${m.url}`).join('\n')}`;
+}
+
 // Turn a validated lead submission into a Contact + Lead (source 'form').
-async function applyLeadSubmission(agentId, form, values, custom) {
+async function applyLeadSubmission(agentId, form, values, custom, media) {
   const phone = values.phone;
   if (isBlank(phone)) {
     const err = new Error('A phone number is required.');
@@ -130,6 +204,8 @@ async function applyLeadSubmission(agentId, form, values, custom) {
   if (!isBlank(values.notes)) transcriptParts.push(String(values.notes).trim());
   const block = customBlock(custom);
   if (block) transcriptParts.push(block);
+  const attachments = mediaBlock(media);
+  if (attachments) transcriptParts.push(attachments);
 
   const lead = await Lead.create({
     agentId,
@@ -155,7 +231,7 @@ async function applyLeadSubmission(agentId, form, values, custom) {
 
 // Turn a validated property submission into an (optional) owner Contact +
 // Property (source 'form').
-async function applyPropertySubmission(agentId, form, values, custom) {
+async function applyPropertySubmission(agentId, form, values, custom, media) {
   let ownerId;
   if (!isBlank(values.ownerPhone) || !isBlank(values.ownerName)) {
     const owner = await findOrCreateContact(agentId, {
@@ -190,6 +266,8 @@ async function applyPropertySubmission(agentId, form, values, custom) {
       areaSqFt: num(values.areaSqFt),
     },
     description: descriptionParts.join('\n\n') || undefined,
+    images: media?.image || [],
+    documents: media?.document || [],
     source: 'form',
     formId: form._id,
   });
@@ -202,6 +280,7 @@ module.exports = {
   REQUIREMENT_TYPES,
   defaultFields,
   ensureDefaultForms,
+  isFieldVisible,
   mapSubmission,
   applyLeadSubmission,
   applyPropertySubmission,

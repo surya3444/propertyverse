@@ -4,7 +4,11 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-// All notification routes require a logged-in agent.
+// Real-time SSE stream. Registered before the shared `auth` middleware because it
+// authenticates inline (header OR ?token= for EventSource clients).
+router.get('/stream', notificationController.streamNotifications);
+
+// All remaining notification routes require a logged-in agent.
 router.use(auth);
 
 router.get('/', notificationController.listNotifications);

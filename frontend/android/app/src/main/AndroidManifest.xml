@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Post the "log this call?" reminder notification (Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Self-hosted push: a foreground service holds the SSE connection so
+         notifications arrive while the app is backgrounded/killed (no Firebase). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
       android:name=".MainApplication"
@@ -43,5 +47,12 @@
           <action android:name="android.intent.action.PHONE_STATE" />
         </intent-filter>
       </receiver>
+
+      <!-- Holds the long-lived SSE connection to our backend so notifications are
+           delivered even when the app is closed (self-hosted push, no Firebase). -->
+      <service
+        android:name=".NotificationStreamService"
+        android:exported="false"
+        android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

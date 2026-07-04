@@ -1,17 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchForm, submitForm, PublicForm } from '../../../lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  fetchForm,
+  submitForm,
+  uploadFiles,
+  isFieldVisible,
+  PublicForm,
+  PublicField,
+  FormValue,
+  UploadedMedia,
+} from '../../../lib/api';
 
 type Status = 'loading' | 'ready' | 'notfound' | 'submitting' | 'success';
 
 export default function FormClient({ publicId }: { publicId: string }) {
   const [status, setStatus] = useState<Status>('loading');
   const [form, setForm] = useState<PublicForm | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, FormValue>>({});
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string>('');
+  // Field keys with an upload currently in flight (blocks submit).
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let active = true;
@@ -35,17 +46,56 @@ export default function FormClient({ publicId }: { publicId: string }) {
     ? ({ ['--accent' as string]: form.accentColor } as React.CSSProperties)
     : undefined;
 
-  function setValue(key: string, value: string) {
+  // Only the fields whose conditional rules pass under the current answers.
+  const visibleFields = useMemo(
+    () => (form ? form.fields.filter((f) => isFieldVisible(f, values)) : []),
+    [form, values]
+  );
+
+  function setValue(key: string, value: FormValue) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  async function onPickFiles(field: PublicField, fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setError(null);
+    setUploading((u) => ({ ...u, [field.key]: true }));
+    try {
+      const picked = Array.from(fileList);
+      const media = await uploadFiles(publicId, picked, field.accept || 'image');
+      const existing = (values[field.key] as UploadedMedia[]) || [];
+      // Multiple = append; single = replace.
+      setValue(field.key, field.multiple ? [...existing, ...media] : media);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setUploading((u) => ({ ...u, [field.key]: false }));
+    }
+  }
+
+  function removeFile(key: string, url: string) {
+    const existing = (values[key] as UploadedMedia[]) || [];
+    setValue(
+      key,
+      existing.filter((m) => m.url !== url)
+    );
+  }
+
+  function isFilled(f: PublicField): boolean {
+    const v = values[f.key];
+    if (f.type === 'file') return Array.isArray(v) && v.length > 0;
+    return !!(typeof v === 'string' && v.trim());
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
-    // Client-side required check for a friendly message before the round-trip.
-    const missing = form.fields
-      .filter((f) => f.required && !((values[f.key] || '').trim()))
-      .map((f) => f.label);
+    if (Object.values(uploading).some(Boolean)) {
+      setError('Please wait for uploads to finish.');
+      return;
+    }
+    // Client-side required check (visible fields only) for a friendly message.
+    const missing = visibleFields.filter((f) => f.required && !isFilled(f)).map((f) => f.label);
     if (missing.length) {
       setError(`Please fill in: ${missing.join(', ')}.`);
       return;
@@ -53,7 +103,12 @@ export default function FormClient({ publicId }: { publicId: string }) {
     setError(null);
     setStatus('submitting');
     try {
-      const msg = await submitForm(publicId, values);
+      // Only send answers for currently-visible fields (backend also enforces).
+      const payload: Record<string, FormValue> = {};
+      for (const f of visibleFields) {
+        if (values[f.key] !== undefined) payload[f.key] = values[f.key];
+      }
+      const msg = await submitForm(publicId, payload);
       setSuccessMsg(msg);
       setStatus('success');
     } catch (err) {
@@ -94,6 +149,7 @@ export default function FormClient({ publicId }: { publicId: string }) {
   }
 
   const submitting = status === 'submitting';
+  const anyUploading = Object.values(uploading).some(Boolean);
   const cta = form?.type === 'property' ? 'Submit property' : 'Send my requirement';
 
   return (
@@ -107,7 +163,7 @@ export default function FormClient({ publicId }: { publicId: string }) {
         {error ? <div className="error">{error}</div> : null}
 
         <form onSubmit={onSubmit} noValidate>
-          {form?.fields.map((f) => (
+          {visibleFields.map((f) => (
             <div className="field" key={f.key}>
               <label className="label" htmlFor={f.key}>
                 {f.label}
@@ -118,14 +174,14 @@ export default function FormClient({ publicId }: { publicId: string }) {
                   id={f.key}
                   className="textarea"
                   placeholder={f.placeholder}
-                  value={values[f.key] || ''}
+                  value={(values[f.key] as string) || ''}
                   onChange={(e) => setValue(f.key, e.target.value)}
                 />
               ) : f.type === 'select' ? (
                 <select
                   id={f.key}
                   className="select"
-                  value={values[f.key] || ''}
+                  value={(values[f.key] as string) || ''}
                   onChange={(e) => setValue(f.key, e.target.value)}
                 >
                   <option value="">Select…</option>
@@ -135,6 +191,14 @@ export default function FormClient({ publicId }: { publicId: string }) {
                     </option>
                   ))}
                 </select>
+              ) : f.type === 'file' ? (
+                <FileField
+                  field={f}
+                  files={(values[f.key] as UploadedMedia[]) || []}
+                  uploading={!!uploading[f.key]}
+                  onPick={(list) => onPickFiles(f, list)}
+                  onRemove={(url) => removeFile(f.key, url)}
+                />
               ) : (
                 <input
                   id={f.key}
@@ -142,21 +206,93 @@ export default function FormClient({ publicId }: { publicId: string }) {
                   type={f.type}
                   inputMode={f.type === 'number' ? 'numeric' : f.type === 'tel' ? 'tel' : undefined}
                   placeholder={f.placeholder}
-                  value={values[f.key] || ''}
+                  value={(values[f.key] as string) || ''}
                   onChange={(e) => setValue(f.key, e.target.value)}
                 />
               )}
             </div>
           ))}
 
-          <button className="button" type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : cta}
+          <button className="button" type="submit" disabled={submitting || anyUploading}>
+            {submitting ? 'Submitting…' : anyUploading ? 'Uploading…' : cta}
           </button>
         </form>
 
         <div className="footer">Powered by PropertyVerse</div>
       </div>
     </main>
+  );
+}
+
+// A file upload control: a dropzone-style picker plus thumbnails/chips for each
+// uploaded file, with remove buttons.
+function FileField({
+  field,
+  files,
+  uploading,
+  onPick,
+  onRemove,
+}: {
+  field: PublicField;
+  files: UploadedMedia[];
+  uploading: boolean;
+  onPick: (list: FileList | null) => void;
+  onRemove: (url: string) => void;
+}) {
+  const isImage = (field.accept || 'image') === 'image';
+  const acceptAttr =
+    field.accept === 'document'
+      ? '.pdf,.doc,.docx,.xls,.xlsx,.txt'
+      : field.accept === 'any'
+        ? undefined
+        : 'image/*';
+  const hint = isImage ? 'PNG, JPG or WEBP' : 'PDF, Word, Excel or text';
+
+  return (
+    <div className="filefield">
+      <label className={`dropzone${uploading ? ' dropzone--busy' : ''}`}>
+        <input
+          type="file"
+          className="filehidden"
+          accept={acceptAttr}
+          multiple={field.multiple}
+          disabled={uploading}
+          onChange={(e) => {
+            onPick(e.target.files);
+            e.currentTarget.value = '';
+          }}
+        />
+        <span className="dropicon">{uploading ? '⏳' : '⬆️'}</span>
+        <span className="droptext">
+          {uploading ? 'Uploading…' : `Tap to ${files.length ? 'add more' : 'upload'}`}
+        </span>
+        <span className="drophint">{hint}</span>
+      </label>
+
+      {files.length ? (
+        <div className={`filelist${isImage ? ' filelist--grid' : ''}`}>
+          {files.map((m) =>
+            isImage ? (
+              <div className="thumb" key={m.url}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={m.url} alt={m.name || 'upload'} />
+                <button type="button" className="thumbx" onClick={() => onRemove(m.url)} aria-label="Remove">
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="filechip" key={m.url}>
+                <span className="fileicon">📄</span>
+                <span className="filename">{m.name || m.url.split('/').pop()}</span>
+                <button type="button" className="filex" onClick={() => onRemove(m.url)} aria-label="Remove">
+                  ×
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

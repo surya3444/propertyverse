@@ -4,7 +4,8 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme';
 import { CallNudge } from '../components/CallNudge';
-import { registerForPush } from '../lib/push';
+import { registerForPush, unregisterFromPush } from '../lib/push';
+import { notifyUnreadChanged } from '../lib/notificationEvents';
 import { RootStackParamList } from './types';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
@@ -19,10 +20,13 @@ export function RootNavigator() {
     hydrate();
   }, [hydrate]);
 
-  // Once authenticated, best-effort register for push (no-op unless Firebase is
-  // configured). The in-app bell/badge works regardless.
+  // Once authenticated, start the self-hosted push stream (Android foreground
+  // service on native; Web Push on PWA). A foreground event bumps the in-app
+  // badge. Stops on logout. The in-app bell/badge works regardless.
   useEffect(() => {
-    if (token) registerForPush();
+    if (!token) return;
+    registerForPush(token, notifyUnreadChanged);
+    return () => unregisterFromPush();
   }, [token]);
 
   // Stable so CallNudge's detector/notification effect doesn't restart each render.

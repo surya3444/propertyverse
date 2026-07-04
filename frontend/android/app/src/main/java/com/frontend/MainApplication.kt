@@ -14,8 +14,9 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Packages that cannot be autolinked yet can be added manually here, for example:
-          // add(MyReactNativePackage())
+          // Self-hosted push stream (SSE foreground service). Not autolinked
+          // because it lives in the app module.
+          add(NotificationStreamPackage())
         },
     )
   }

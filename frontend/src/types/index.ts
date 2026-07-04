@@ -219,7 +219,17 @@ export interface Property {
 // ---- Forms (public lead/property capture) ----
 
 export type FormType = 'lead' | 'property';
-export type FormFieldType = 'text' | 'tel' | 'email' | 'number' | 'select' | 'textarea';
+export type FormFieldType = 'text' | 'tel' | 'email' | 'number' | 'select' | 'textarea' | 'file';
+export type FormFileAccept = 'image' | 'document' | 'any';
+export type VisibleOperator = 'equals' | 'notEquals' | 'in' | 'notIn';
+
+// Conditional-visibility rule: show the field only when the answer to `field`
+// satisfies `operator` against `values`. Absent = always shown.
+export interface VisibleWhen {
+  field: string;
+  operator: VisibleOperator;
+  values: string[];
+}
 
 export interface FormField {
   key: string;
@@ -231,6 +241,11 @@ export interface FormField {
   options?: string[];
   placeholder?: string;
   custom?: boolean;
+  // For `file` fields.
+  accept?: FormFileAccept;
+  multiple?: boolean;
+  // Optional conditional visibility.
+  visibleWhen?: VisibleWhen;
 }
 
 export interface Form {

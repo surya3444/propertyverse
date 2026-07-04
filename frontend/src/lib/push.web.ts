@@ -17,7 +17,12 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   return output;
 }
 
-export async function registerForPush(_onMessage?: () => void): Promise<void> {
+// Signature mirrors the native push.ts (token, onMessage). The token isn't
+// needed on web — the api client attaches auth to the subscribe call itself.
+export async function registerForPush(
+  _token?: string | null,
+  _onMessage?: () => void
+): Promise<void> {
   try {
     if (
       typeof window === 'undefined' ||
@@ -53,3 +58,7 @@ export async function registerForPush(_onMessage?: () => void): Promise<void> {
     console.log('[push] web push not enabled:', (err as Error)?.message);
   }
 }
+
+// No-op on web (mirrors native push.ts). The browser push subscription persists
+// across sessions; there's nothing to tear down on logout here.
+export function unregisterFromPush(): void {}

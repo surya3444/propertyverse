@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Bell } from 'lucide-react-native';
 import { notificationsApi } from '../api/notifications';
 import { colors, radius, shadow } from '../theme';
 import { haptic } from '../lib/haptics';
+import { onUnreadChanged } from '../lib/notificationEvents';
 
 // Header bell with an unread-count badge. Refreshes its count whenever the
 // hosting screen regains focus (e.g. returning from the Notifications screen or
@@ -26,6 +27,9 @@ export function NotificationBell({ onPress }: { onPress: () => void }) {
       refresh();
     }, [refresh])
   );
+
+  // Refresh instantly when a real-time push arrives while the app is open.
+  useEffect(() => onUnreadChanged(refresh), [refresh]);
 
   return (
     <Pressable

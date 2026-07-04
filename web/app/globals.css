@@ -216,3 +216,135 @@ body {
   border-radius: 12px;
   margin-bottom: 16px;
 }
+
+/* File upload field. */
+.filefield {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  border: 1.5px dashed var(--pv-border);
+  border-radius: 12px;
+  padding: 20px 14px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 4%, var(--pv-surface));
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--pv-surface));
+}
+
+.dropzone--busy {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.filehidden {
+  display: none;
+}
+
+.dropicon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.droptext {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.drophint {
+  font-size: 12px;
+  color: var(--pv-subtle);
+}
+
+.filelist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filelist--grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+/* Image thumbnails. */
+.thumb {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--pv-border);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbx,
+.filex {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(34, 30, 27, 0.72);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Document chips. */
+.filechip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--pv-border);
+  border-radius: 12px;
+  padding: 10px 40px 10px 12px;
+  background: var(--pv-surface);
+}
+
+.fileicon {
+  font-size: 18px;
+}
+
+.filename {
+  font-size: 14px;
+  color: var(--pv-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filechip .filex {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  background: var(--pv-border);
+  color: var(--pv-muted);
+}

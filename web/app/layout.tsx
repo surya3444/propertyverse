@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'PropertyVerse Forms',
-  description: 'Share your requirement or list your property.',
+  title: 'PropertyVerse — AI-powered real-estate CRM',
+  description:
+    'Capture every call with voice AI, organise your entire pipeline, and follow up automatically. The all-in-one CRM built for real-estate agents.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

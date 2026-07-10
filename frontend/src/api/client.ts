@@ -8,6 +8,14 @@ export function setAuthTokenGetter(getter: () => string | null) {
   tokenGetter = getter;
 }
 
+// The auth store registers a handler so an expired session can bounce the user
+// to the login screen instead of surfacing a bare 401 on every screen.
+let unauthorizedHandler: () => void = () => {};
+
+export function setUnauthorizedHandler(handler: () => void) {
+  unauthorizedHandler = handler;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -17,15 +25,22 @@ export class ApiError extends Error {
   }
 }
 
+// A hung request should surface as an error, not a screen that spins forever.
+// Uploads get longer: audio and photos travel over the agent's mobile uplink.
+const DEFAULT_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   /** Pass a FormData instance for multipart uploads (e.g. audio). */
   formData?: FormData;
+  timeoutMs?: number;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, formData } = options;
+  const timeoutMs = options.timeoutMs ?? (formData ? UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
 
   const headers: Record<string, string> = {};
   const token = tokenGetter();
@@ -40,18 +55,49 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     payload = JSON.stringify(body);
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { method, headers, body: payload });
-  } catch {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: payload,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError('The request took too long. Please try again.', 0);
+    }
     throw new ApiError('Network error. Is the backend running?', 0);
+  } finally {
+    clearTimeout(timer);
   }
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+
+  // A gateway timeout or cold-start page is HTML, not JSON. Parsing it blind
+  // threw a raw SyntaxError that escaped every `catch (e: ApiError)` in the app.
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (response.ok) {
+        throw new ApiError('The server sent an unreadable response.', response.status);
+      }
+      // Fall through: `data` stays null and the status drives the message below.
+    }
+  }
 
   if (!response.ok) {
-    const message = (data && data.error) || `Request failed (${response.status})`;
+    if (response.status === 401) unauthorizedHandler();
+    const message =
+      (data && data.error) ||
+      (response.status >= 500
+        ? 'The server is having trouble. Please try again in a moment.'
+        : `Request failed (${response.status})`);
     throw new ApiError(message, response.status);
   }
 

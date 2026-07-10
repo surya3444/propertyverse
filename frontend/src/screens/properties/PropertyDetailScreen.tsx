@@ -11,7 +11,8 @@ import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { SectionHeader } from '../../components/SectionHeader';
 import { propertiesApi } from '../../api/properties';
-import { Contact, Lead, Property } from '../../types';
+import { MatchBadge, MatchReasons } from '../../components/MatchReasons';
+import { Contact, LeadMatch, Property } from '../../types';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatCurrency } from '../../utils/format';
 import { haptic } from '../../lib/haptics';
@@ -20,7 +21,9 @@ import { RootScreenProps } from '../../navigation/types';
 export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'PropertyDetail'>) {
   const { propertyId } = route.params;
   const [property, setProperty] = useState<Property | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<LeadMatch[]>([]);
+  // The endpoint ranks every match but returns only the strongest page.
+  const [leadTotal, setLeadTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const { width } = useWindowDimensions();
 
@@ -28,10 +31,13 @@ export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'Pro
     try {
       const [{ property: p }, m] = await Promise.all([
         propertiesApi.get(propertyId),
-        propertiesApi.matchingLeads(propertyId).catch(() => ({ leads: [] as Lead[] })),
+        propertiesApi
+          .matchingLeads(propertyId)
+          .catch(() => ({ leads: [] as LeadMatch[], total: 0 })),
       ]);
       setProperty(p);
       setLeads(m.leads);
+      setLeadTotal(m.total);
     } finally {
       setLoading(false);
     }
@@ -188,7 +194,7 @@ export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'Pro
         ) : null}
 
         {/* Matching leads */}
-        <View style={styles.section}><SectionHeader title={`Matching leads (${leads.length})`} /></View>
+        <View style={styles.section}><SectionHeader title={`Matching leads (${leadTotal})`} /></View>
         {leads.length === 0 ? <Card variant="flat"><Text style={styles.muted}>No matching requirements yet.</Text></Card> :
           leads.map((l) => (
             <Card key={l._id} style={styles.rowCard} onPress={() => navigation.navigate('LeadDetail', { leadId: l._id })}>
@@ -196,12 +202,22 @@ export function PropertyDetailScreen({ navigation, route }: RootScreenProps<'Pro
                 <View style={styles.tile}><UserIcon size={18} color={colors.primary} strokeWidth={2.2} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{l.clientName}</Text>
-                  <Text style={styles.muted}>{formatCurrency(l.requirements?.budgetMax)} · {l.requirements?.location ?? 'Any area'}</Text>
+                  <Text style={styles.muted}>
+                    {formatCurrency(l.requirements?.budgetMax)} · {l.requirements?.location ?? 'Any area'}
+                    {l.distanceKm != null ? ` · ${l.distanceKm} km` : ''}
+                  </Text>
+                  <MatchReasons reasons={l.matchReasons} limit={2} />
                 </View>
-                <ChevronRight size={18} color={colors.textSubtle} />
+                <View style={styles.rowEnd}>
+                  <MatchBadge score={l.matchScore} quality={l.matchQuality} />
+                  <ChevronRight size={18} color={colors.textSubtle} />
+                </View>
               </View>
             </Card>
           ))}
+        {leadTotal > leads.length ? (
+          <Text style={styles.muted}>Showing the {leads.length} strongest of {leadTotal} matches.</Text>
+        ) : null}
 
         <Button title="Schedule a visit" icon={CalendarPlus} onPress={scheduleVisit} style={styles.cta} />
       </ScrollView>
@@ -231,6 +247,7 @@ const styles = StyleSheet.create({
   amText: { color: colors.primaryDark, fontWeight: '600', fontSize: 13 },
   rowCard: { padding: spacing.md, marginBottom: spacing.sm },
   rowInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowEnd: { alignItems: 'flex-end', gap: 4 },
   tile: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.primaryTint, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { ...typography.bodyStrong, fontSize: 15 },
   muted: { ...typography.caption },

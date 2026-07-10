@@ -1,10 +1,20 @@
 const Lead = require('../models/Lead');
+const Contact = require('../models/Contact');
+const Property = require('../models/Property');
 const { extractLeadFromAudio, AiExtractionError } = require('../services/geminiService');
 const locationService = require('../services/locationService');
 const { findOrCreateContact } = require('../services/contactService');
 const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const audit = require('../services/auditService');
 const { parsePagination } = require('../utils/query');
+const { pickFields, resolveOwnedRef, InvalidReferenceError } = require('../utils/ownership');
+
+// Lead fields a client may set. `agentId`, `source` and `formId` are server-owned:
+// spreading req.body here would let a caller reassign the lead to another agent.
+const EDITABLE = [
+  'clientName', 'phoneNumber', 'requirements', 'status', 'reviewed',
+  'customFields', 'contactId', 'closedPropertyId',
+];
 
 // Normalise a location selection ({label, placeId, lat, lng}) into a GeoJSON
 // point. Returns undefined when coordinates are absent.
@@ -70,6 +80,7 @@ exports.createLeadFromVoice = async (req, res) => {
         transactionType,
         budgetMax: extractedData.budgetMax,
         propertyType: extractedData.propertyType,
+        bedrooms: extractedData.bedrooms,
         location: extractedData.location,
         geo,
         urgency: extractedData.urgency,
@@ -175,7 +186,7 @@ exports.updateLead = async (req, res) => {
     const before = await Lead.findOne({ _id: req.params.id, agentId: req.user.id });
     if (!before) return res.status(404).json({ error: 'Lead not found.' });
 
-    const update = { ...req.body };
+    const update = pickFields(req.body, EDITABLE);
     // Sanitize custom values against the agent's lead schema (never trust keys).
     if (update.customFields !== undefined) {
       update.customFields = sanitizeCustomValues(
@@ -193,11 +204,25 @@ exports.updateLead = async (req, res) => {
       update.closedPropertyId = req.body.propertyId;
     }
 
+    // Both references must resolve inside this agent's own data. Otherwise a
+    // caller could attach a foreign contact and read it back through the
+    // populate in getLead.
+    if (update.contactId !== undefined) {
+      update.contactId = await resolveOwnedRef(Contact, update.contactId, req.user.id, 'contact');
+    }
+    if (update.closedPropertyId !== undefined) {
+      update.closedPropertyId = await resolveOwnedRef(
+        Property, update.closedPropertyId, req.user.id, 'property'
+      );
+    }
+
     const lead = await Lead.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user.id },
       update,
       { new: true, runValidators: true }
     );
+    // Deleted between the read above and this write.
+    if (!lead) return res.status(404).json({ error: 'Lead not found.' });
 
     await audit.record(req.user.id, 'update', 'Lead', lead._id, {
       before: audit.snapshot(before),
@@ -205,6 +230,9 @@ exports.updateLead = async (req, res) => {
     });
     res.status(200).json({ message: 'Lead updated.', lead });
   } catch (error) {
+    if (error instanceof InvalidReferenceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Update lead error:', error);
     res.status(500).json({ error: 'Failed to update lead.' });
   }

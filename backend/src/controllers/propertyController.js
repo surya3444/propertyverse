@@ -1,11 +1,13 @@
 const Property = require('../models/Property');
 const Activity = require('../models/Activity');
+const Contact = require('../models/Contact');
 const { extractPropertyFromAudio, AiExtractionError } = require('../services/geminiService');
 const { findOrCreateContact } = require('../services/contactService');
 const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const cloudinaryService = require('../services/cloudinaryService');
 const audit = require('../services/auditService');
 const { parsePagination, containsRegex } = require('../utils/query');
+const { resolveOwnedRef, InvalidReferenceError } = require('../utils/ownership');
 
 // Normalise an incoming location selection ({label, placeId, lat, lng}) into the
 // GeoJSON point our schema expects. Returns undefined when coordinates are absent.
@@ -35,8 +37,12 @@ function pickEditable(body) {
 
 // Resolve the owner: an explicit ownerId, or owner {name, phone} we find/create
 // (tagging them as an Owner). Returns an ObjectId or undefined.
+//
+// An explicit ownerId is checked against the agent's own contact book. Without
+// that check a caller could name any contact as owner and then read its name,
+// phone and email back through the populate in getProperty/updateProperty.
 async function resolveOwner(agentId, body) {
-  if (body.ownerId) return body.ownerId;
+  if (body.ownerId) return resolveOwnedRef(Contact, body.ownerId, agentId, 'contact');
   const owner = body.owner;
   if (owner && (owner.phone || owner.name)) {
     const contact = await findOrCreateContact(agentId, {
@@ -91,6 +97,9 @@ exports.createProperty = async (req, res) => {
     });
     res.status(201).json({ message: 'Property created.', property });
   } catch (error) {
+    if (error instanceof InvalidReferenceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Create property error:', error);
     res.status(500).json({ error: 'Failed to create property.' });
   }
@@ -162,6 +171,8 @@ exports.updateProperty = async (req, res) => {
       update,
       { new: true, runValidators: true }
     ).populate('ownerId', 'name phone email roles');
+    // Deleted between the read above and this write.
+    if (!property) return res.status(404).json({ error: 'Property not found.' });
 
     await audit.record(req.user.id, 'update', 'Property', property._id, {
       before: audit.snapshot(before),
@@ -169,6 +180,9 @@ exports.updateProperty = async (req, res) => {
     });
     res.status(200).json({ message: 'Property updated.', property });
   } catch (error) {
+    if (error instanceof InvalidReferenceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Update property error:', error);
     res.status(500).json({ error: 'Failed to update property.' });
   }

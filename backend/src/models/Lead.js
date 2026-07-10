@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const geoPointSchema = require('./geoPoint');
+const { REQUIREMENT_TYPES } = require('../services/matchingService');
 
 const leadSchema = new mongoose.Schema({
   agentId: {
@@ -26,7 +27,13 @@ const leadSchema = new mongoose.Schema({
     // Whether the client wants to buy or rent.
     transactionType: { type: String, enum: ['Buy', 'Rent'], default: 'Buy' },
     budgetMax: { type: Number },
-    propertyType: { type: String, enum: ['Apartment', 'Villa', 'Commercial', 'Plot', 'Any'] },
+    // A client can want any type a listing can be. This used to allow only
+    // Apartment/Villa/Commercial/Plot/Any, while the voice extractor was free to
+    // return any of the twelve property types — so a lead recorded as a "Studio"
+    // failed schema validation and the whole voice capture 500'd.
+    propertyType: { type: String, enum: REQUIREMENT_TYPES },
+    // Desired bedroom count (BHK). Scored against Property.features.bedrooms.
+    bedrooms: { type: Number },
     location: { type: String },
     // Exact desired area with coordinates (set when the agent picks a
     // suggestion for the spoken/typed location). Absent = location is text-only.

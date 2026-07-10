@@ -1,4 +1,3 @@
-const Form = require('../models/Form');
 const cloudinaryService = require('../services/cloudinaryService');
 
 // Mimetypes we accept from the public (unauthenticated) form uploader. Images
@@ -14,13 +13,8 @@ const DOC_MIME =
 // mimetypes are validated. Field name: 'files'. ?type=image|document.
 exports.uploadPublicMedia = async (req, res) => {
   try {
-    // Only accept uploads for a real, active form (blocks random abuse of the
-    // open endpoint against a bogus publicId).
-    const form = await Form.findOne({ publicId: req.params.publicId }).select('_id isActive');
-    if (!form || !form.isActive) {
-      return res.status(404).json({ error: 'This form is not available.' });
-    }
-
+    // The activeForm middleware already resolved (and checked) the form, before
+    // multer buffered a single byte.
     if (!cloudinaryService.isConfigured()) {
       return res.status(503).json({ error: 'Uploads are not available right now.' });
     }

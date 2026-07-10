@@ -1,5 +1,16 @@
 import { api } from './client';
-import { Lead, Property } from '../types';
+import { Lead, PropertyMatch } from '../types';
+
+// What every matching endpoint returns alongside its rows.
+export interface MatchMeta {
+  count: number;
+  total: number;
+  page: number;
+  limit: number;
+  /** True when both sides had coordinates, so results are distance-ranked. */
+  geofenced: boolean;
+  radiusKm: number;
+}
 
 export const leadsApi = {
   list: (status?: string) =>
@@ -13,8 +24,12 @@ export const leadsApi = {
 
   remove: (id: string) => api.delete<{ message: string }>(`/leads/${id}`),
 
-  matches: (leadId: string) =>
-    api.get<{ count: number; matches: Property[] }>(`/leads/${leadId}/matches`),
+  matches: (leadId: string, params: { page?: number; limit?: number; radiusKm?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v != null && qs.set(k, String(v)));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return api.get<MatchMeta & { matches: PropertyMatch[] }>(`/leads/${leadId}/matches${suffix}`);
+  },
 
   // Upload a recorded voice note. `recording` comes from the platform recorder:
   // on native `part` is an RN file object, on web it's a Blob.

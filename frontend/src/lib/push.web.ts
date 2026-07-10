@@ -59,6 +59,26 @@ export async function registerForPush(
   }
 }
 
-// No-op on web (mirrors native push.ts). The browser push subscription persists
-// across sessions; there's nothing to tear down on logout here.
-export function unregisterFromPush(): void {}
+// Tear the browser's push subscription down and tell the backend to forget it.
+//
+// This used to be a no-op, on the grounds that "the subscription persists across
+// sessions" — which is exactly the problem. The PushToken row stayed bound to
+// the agent who signed out, so the next agent to use this browser received the
+// previous one's notifications. Called before the token is cleared, because
+// /notifications/unsubscribe is an authenticated endpoint.
+export async function unregisterFromPush(): Promise<void> {
+  try {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+
+    // Drop the server record first: after unsubscribe() we no longer have an
+    // endpoint to name, and a stale row would keep receiving sends.
+    await notificationsApi.unsubscribeWebPush(subscription.endpoint).catch(() => {});
+    await subscription.unsubscribe();
+  } catch (err) {
+    console.log('[push] web push teardown failed:', (err as Error)?.message);
+  }
+}

@@ -35,12 +35,10 @@ function publicShape(form, agentName) {
 }
 
 // GET /api/public/forms/:publicId — the public definition the web app renders.
+// `req.form` is resolved (and checked active) by the activeForm middleware.
 exports.getPublicForm = async (req, res) => {
   try {
-    const form = await Form.findOne({ publicId: req.params.publicId });
-    if (!form || !form.isActive) {
-      return res.status(404).json({ error: 'This form is not available.' });
-    }
+    const { form } = req;
     const agent = await User.findById(form.agentId).select('name');
     res.status(200).json({ form: publicShape(form, agent ? agent.name : undefined) });
   } catch (error) {
@@ -52,10 +50,7 @@ exports.getPublicForm = async (req, res) => {
 // POST /api/public/forms/:publicId/submit — turn a submission into records.
 exports.submitPublicForm = async (req, res) => {
   try {
-    const form = await Form.findOne({ publicId: req.params.publicId });
-    if (!form || !form.isActive) {
-      return res.status(404).json({ error: 'This form is not available.' });
-    }
+    const { form } = req;
 
     const data = req.body && typeof req.body === 'object' ? req.body.data || req.body : {};
     const { values, custom, media } = formService.mapSubmission(form, data);

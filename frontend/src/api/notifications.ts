@@ -17,6 +17,9 @@ export const notificationsApi = {
   subscribeWebPush: (subscription: unknown) =>
     api.post<{ message: string }>('/notifications/subscribe', { subscription }),
 
+  unsubscribeWebPush: (endpoint: string) =>
+    api.post<{ message: string }>('/notifications/unsubscribe', { endpoint }),
+
   // FCM device token (optional native path).
   registerPushToken: (token: string, platform: 'android' | 'ios' | 'web') =>
     api.post<{ message: string }>('/notifications/push-tokens', { token, platform }),

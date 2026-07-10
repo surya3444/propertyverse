@@ -6,6 +6,10 @@ const { findOrCreateContact } = require('../services/contactService');
 const { getFieldDefs, sanitizeCustomValues } = require('../services/customFieldService');
 const audit = require('../services/auditService');
 const { parsePagination, containsRegex } = require('../utils/query');
+const { pickFields } = require('../utils/ownership');
+
+// Contact fields a client may set. `agentId` is server-owned.
+const EDITABLE = ['name', 'phone', 'email', 'notes', 'roles', 'customFields'];
 
 // Create a contact manually (or reuse an existing one by phone).
 exports.createContact = async (req, res) => {
@@ -84,7 +88,7 @@ exports.updateContact = async (req, res) => {
     const before = await Contact.findOne({ _id: req.params.id, agentId: req.user.id });
     if (!before) return res.status(404).json({ error: 'Contact not found.' });
 
-    const update = { ...req.body };
+    const update = pickFields(req.body, EDITABLE);
     // Sanitize custom values against the agent's contact schema (never trust keys).
     if (update.customFields !== undefined) {
       update.customFields = sanitizeCustomValues(
@@ -97,6 +101,9 @@ exports.updateContact = async (req, res) => {
       update,
       { new: true, runValidators: true }
     );
+    // Deleted between the read above and this write.
+    if (!contact) return res.status(404).json({ error: 'Contact not found.' });
+
     await audit.record(req.user.id, 'update', 'Contact', contact._id, {
       before: audit.snapshot(before),
       after: audit.snapshot(contact),

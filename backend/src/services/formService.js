@@ -2,15 +2,11 @@ const Form = require('../models/Form');
 const Lead = require('../models/Lead');
 const Property = require('../models/Property');
 const { findOrCreateContact } = require('./contactService');
+const cloudinaryService = require('./cloudinaryService');
 
-// Property types the Property model accepts. Keep in sync with
-// models/Property.js + the frontend PROPERTY_TYPES.
-const PROPERTY_TYPES = [
-  'Apartment', 'Independent House', 'Villa', 'Penthouse', 'Studio', 'Plot',
-  'Land', 'Farmhouse', 'Commercial', 'Office', 'Shop', 'Warehouse',
-];
-// Requirement types the Lead model accepts (a narrower set + "Any").
-const REQUIREMENT_TYPES = ['Any', 'Apartment', 'Villa', 'Commercial', 'Plot'];
+// Property/requirement types. Owned by the matching engine so the form options,
+// the model enums and the AI schema can never drift apart.
+const { PROPERTY_TYPES, REQUIREMENT_TYPES } = require('./matchingService');
 
 // The default questions for each form type. `key`s that aren't `custom` map to a
 // model field in applyLeadSubmission / applyPropertySubmission below. Agents can
@@ -43,6 +39,7 @@ function defaultFields(type) {
     { key: 'transactionType', label: 'Looking to', type: 'select', options: ['Buy', 'Rent'] },
     { key: 'propertyType', label: 'Property type', type: 'select', options: REQUIREMENT_TYPES },
     { key: 'budgetMax', label: 'Budget (max)', type: 'number' },
+    { key: 'bedrooms', label: 'Bedrooms (BHK)', type: 'number' },
     { key: 'location', label: 'Preferred location', type: 'text' },
     { key: 'urgency', label: 'How soon?', type: 'select', options: ['High', 'Medium', 'Low'] },
     { key: 'notes', label: 'Anything else?', type: 'textarea' },
@@ -101,10 +98,14 @@ function isFieldVisible(field, values = {}) {
 // A media descriptor uploaded via the public upload endpoint. We only trust the
 // server-generated fields (a Cloudinary secure_url + public_id); everything else
 // is cosmetic. Drops anything that isn't a plausible descriptor.
+//
+// The url must be one *we* issued. Accepting any https URL let a submitter put
+// arbitrary links into a listing's images/documents, which the agent's app then
+// renders — so the origin and cloud name are checked, not just the scheme.
 function sanitizeMedia(raw) {
   const list = Array.isArray(raw) ? raw : [raw];
   return list
-    .filter((m) => m && typeof m === 'object' && typeof m.url === 'string' && /^https:\/\//.test(m.url))
+    .filter((m) => m && typeof m === 'object' && cloudinaryService.isDeliveryUrl(m.url))
     .map((m) => ({
       url: m.url,
       publicId: typeof m.publicId === 'string' ? m.publicId : undefined,
@@ -155,6 +156,16 @@ function mapSubmission(form, data = {}) {
     }
 
     const value = typeof raw === 'string' ? raw.trim() : raw;
+
+    // A `select` may only answer with one of its declared options. The built-in
+    // keys were covered incidentally by the Mongoose enums, but an agent's own
+    // select accepted any string the submitter cared to post.
+    if (field.type === 'select' && field.options?.length && !field.options.includes(String(value))) {
+      const err = new Error(`“${field.label}” must be one of the offered choices.`);
+      err.status = 400;
+      throw err;
+    }
+
     if (field.custom) custom.push({ label: field.label, value });
     else values[field.key] = value;
   }
@@ -220,6 +231,7 @@ async function applyLeadSubmission(agentId, form, values, custom, media) {
       transactionType,
       budgetMax: num(values.budgetMax),
       propertyType: values.propertyType,
+      bedrooms: num(values.bedrooms),
       location: values.location,
       urgency: values.urgency,
       rawAudioTranscript: transcriptParts.join('\n\n') || undefined,

@@ -72,28 +72,19 @@ async function generateStructured({ prompt, audioBase64, mimeType, schema }) {
   throw new AiExtractionError('Voice processing is temporarily unavailable. Please try again.');
 }
 
-// The property kinds we can classify into. Keep in sync with the Property model
-// enum (backend/src/models/Property.js) and the frontend PROPERTY_TYPES.
-const PROPERTY_TYPES = [
-  'Apartment',
-  'Independent House',
-  'Villa',
-  'Penthouse',
-  'Studio',
-  'Plot',
-  'Land',
-  'Farmhouse',
-  'Commercial',
-  'Office',
-  'Shop',
-  'Warehouse',
-];
+// The property kinds we can classify into. The matching engine owns the list;
+// the Property/Lead schemas and the frontend mirror it.
+const { PROPERTY_TYPES, REQUIREMENT_TYPES } = require('./matchingService');
 
 const LEAD_SCHEMA = {
   type: 'OBJECT',
   properties: {
     budgetMax: { type: 'INTEGER', description: 'Maximum budget extracted as a number. E.g., 500000' },
-    propertyType: { type: 'STRING', enum: [...PROPERTY_TYPES, 'Any'] },
+    propertyType: { type: 'STRING', enum: REQUIREMENT_TYPES },
+    bedrooms: {
+      type: 'INTEGER',
+      description: 'Desired number of bedrooms / BHK if the client mentions one (e.g. "3 BHK" -> 3)',
+    },
     location: { type: 'STRING', description: 'City, neighborhood, or general area' },
     urgency: { type: 'STRING', enum: ['High', 'Medium', 'Low'] },
     clientName: { type: 'STRING', description: 'Name of the client if mentioned in the recording' },
@@ -164,7 +155,11 @@ function sanitizeLead(data) {
     const n = Number(out.budgetMax);
     out.budgetMax = Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
   }
-  if (![...PROPERTY_TYPES, 'Any'].includes(out.propertyType)) out.propertyType = 'Any';
+  if (out.bedrooms != null) {
+    const n = Number(out.bedrooms);
+    out.bedrooms = Number.isFinite(n) && n > 0 && n < 50 ? Math.round(n) : undefined;
+  }
+  if (!REQUIREMENT_TYPES.includes(out.propertyType)) out.propertyType = 'Any';
   const urgencies = ['High', 'Medium', 'Low'];
   if (!urgencies.includes(out.urgency)) out.urgency = undefined;
   if (typeof out.location === 'string') out.location = out.location.trim() || undefined;

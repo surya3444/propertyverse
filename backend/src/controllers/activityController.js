@@ -1,7 +1,29 @@
 const Activity = require('../models/Activity');
 const Lead = require('../models/Lead');
+const Contact = require('../models/Contact');
+const Property = require('../models/Property');
 const audit = require('../services/auditService');
 const { parsePagination } = require('../utils/query');
+const { pickFields, resolveOwnedRef, InvalidReferenceError } = require('../utils/ownership');
+
+// Activity fields a client may set. `agentId` is server-owned.
+const EDITABLE = [
+  'contactId', 'propertyId', 'kind', 'scheduledAt', 'notes', 'outcome',
+  'status', 'completedAt',
+];
+
+// Resolve the contact + property an activity points at, inside this agent's own
+// data. Both are echoed back populated (name, phone, title, location), so an
+// unchecked reference here is a direct read of another agent's records.
+async function resolveRefs(agentId, fields) {
+  if (fields.contactId !== undefined) {
+    fields.contactId = await resolveOwnedRef(Contact, fields.contactId, agentId, 'contact');
+  }
+  if (fields.propertyId !== undefined) {
+    fields.propertyId = await resolveOwnedRef(Property, fields.propertyId, agentId, 'property');
+  }
+  return fields;
+}
 
 // Logging a real interaction (a call, visit or follow-up) means the agent has
 // engaged the contact — so nudge that contact's brand-new leads to "Contacted".
@@ -23,23 +45,15 @@ async function advanceLeadsForContact(agentId, contactId, kind) {
 // property). The contact must already exist (the app picks or creates it first).
 exports.createActivity = async (req, res) => {
   try {
-    const { contactId, propertyId, kind, scheduledAt, notes, outcome, status } = req.body;
-    if (!contactId) {
+    if (!req.body.contactId) {
       return res.status(400).json({ error: 'A contact is required.' });
     }
-    const activity = await Activity.create({
-      agentId: req.user.id,
-      contactId,
-      propertyId,
-      kind,
-      scheduledAt,
-      notes,
-      outcome,
-      status,
-    });
+    const fields = await resolveRefs(req.user.id, pickFields(req.body, EDITABLE));
+
+    const activity = await Activity.create({ agentId: req.user.id, ...fields });
 
     // Keep the pipeline in sync: engaging a contact advances their new leads.
-    await advanceLeadsForContact(req.user.id, contactId, activity.kind);
+    await advanceLeadsForContact(req.user.id, activity.contactId, activity.kind);
     await audit.record(req.user.id, 'create', 'Activity', activity._id, {
       after: audit.snapshot(activity),
     });
@@ -50,6 +64,9 @@ exports.createActivity = async (req, res) => {
     ]);
     res.status(201).json({ message: 'Scheduled.', activity: populated });
   } catch (error) {
+    if (error instanceof InvalidReferenceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Create activity error:', error);
     res.status(500).json({ error: 'Failed to schedule.' });
   }
@@ -131,7 +148,7 @@ exports.updateActivity = async (req, res) => {
     const before = await Activity.findOne({ _id: req.params.id, agentId: req.user.id });
     if (!before) return res.status(404).json({ error: 'Activity not found.' });
 
-    const update = { ...req.body };
+    const update = await resolveRefs(req.user.id, pickFields(req.body, EDITABLE));
 
     // Rescheduling to a future time revives a Missed/Cancelled item back to
     // Scheduled — unless the caller set an explicit status. This is what makes
@@ -155,6 +172,8 @@ exports.updateActivity = async (req, res) => {
     )
       .populate('contactId', 'name phone')
       .populate('propertyId', 'title location');
+    // Deleted between the read above and this write.
+    if (!activity) return res.status(404).json({ error: 'Activity not found.' });
 
     // Completing/logging a real interaction advances the contact's new leads.
     if (update.status === 'Done') {
@@ -167,6 +186,9 @@ exports.updateActivity = async (req, res) => {
     });
     res.status(200).json({ message: 'Updated.', activity });
   } catch (error) {
+    if (error instanceof InvalidReferenceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Update activity error:', error);
     res.status(500).json({ error: 'Failed to update activity.' });
   }

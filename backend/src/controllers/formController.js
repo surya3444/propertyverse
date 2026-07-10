@@ -10,6 +10,14 @@ const EDITABLE = ['title', 'description', 'accentColor', 'isActive', 'fields'];
 const VISIBLE_OPERATORS = ['equals', 'notEquals', 'in', 'notIn'];
 const FILE_ACCEPT = ['image', 'document', 'any'];
 
+// The accent is interpolated into the public form's CSS as a custom property.
+// Only a hex colour ever reaches the page.
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function sanitizeAccent(value) {
+  return typeof value === 'string' && HEX_COLOR.test(value.trim()) ? value.trim() : undefined;
+}
+
 // Keep a conditional-visibility rule only when it references a real field key and
 // carries a valid operator; otherwise drop it (field then always shows).
 function sanitizeVisibleWhen(vw, keys) {
@@ -49,8 +57,12 @@ function pickEditable(body) {
   const out = {};
   for (const key of EDITABLE) {
     if (body[key] === undefined) continue;
-    out[key] = key === 'fields' ? sanitizeFields(body[key]) : body[key];
+    if (key === 'fields') out[key] = sanitizeFields(body[key]);
+    else if (key === 'accentColor') out[key] = sanitizeAccent(body[key]);
+    else out[key] = body[key];
   }
+  // A rejected accent must not clear the stored one.
+  if (out.accentColor === undefined) delete out.accentColor;
   return out;
 }
 
@@ -77,7 +89,7 @@ exports.createForm = async (req, res) => {
       type,
       title: req.body.title || (type === 'property' ? 'Property submission' : 'Lead capture'),
       description: req.body.description,
-      accentColor: req.body.accentColor,
+      accentColor: sanitizeAccent(req.body.accentColor),
       fields,
     });
     res.status(201).json({ message: 'Form created.', form });

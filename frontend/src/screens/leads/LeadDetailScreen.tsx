@@ -9,12 +9,13 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { LocationPicker } from '../../components/LocationPicker';
 import { CustomFieldsEditor, CustomFieldsDisplay } from '../../components/CustomFieldsEditor';
+import { MatchBadge, MatchReasons } from '../../components/MatchReasons';
 import { leadsApi } from '../../api/leads';
 import {
   CustomFieldValues,
   Lead,
   LeadStatus,
-  Property,
+  PropertyMatch,
   REQUIREMENT_TYPES,
   RequirementType,
   SelectedLocation,
@@ -33,7 +34,9 @@ const STATUSES: LeadStatus[] = ['New', 'Contacted', 'Closed'];
 export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDetail'>) {
   const { leadId } = route.params;
   const [lead, setLead] = useState<Lead | null>(null);
-  const [matches, setMatches] = useState<Property[]>([]);
+  const [matches, setMatches] = useState<PropertyMatch[]>([]);
+  // How many matched in total; the endpoint returns only the strongest page.
+  const [matchTotal, setMatchTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [savingLoc, setSavingLoc] = useState(false);
@@ -43,9 +46,18 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
   const [savingReq, setSavingReq] = useState(false);
   const [edTxn, setEdTxn] = useState<TransactionType>('Buy');
   const [edBudget, setEdBudget] = useState('');
+  const [edBeds, setEdBeds] = useState('');
   const [edType, setEdType] = useState<RequirementType>('Any');
   const [edUrgency, setEdUrgency] = useState<Urgency | undefined>();
   const [edCustom, setEdCustom] = useState<CustomFieldValues>({});
+
+  // The endpoint ranks every match but returns only the strongest page, so keep
+  // the total alongside the rows.
+  const refreshMatches = useCallback(async (id: string) => {
+    const res = await leadsApi.matches(id);
+    setMatches(res.matches);
+    setMatchTotal(res.total);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +67,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
       ]);
       setLead(leadRes.lead);
       setMatches(matchRes.matches);
+      setMatchTotal(matchRes.total);
     } finally {
       setLoading(false);
     }
@@ -92,13 +105,12 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
           },
         });
         setLead(res.lead);
-        const m = await leadsApi.matches(lead._id);
-        setMatches(m.matches);
+        await refreshMatches(lead._id);
       } finally {
         setSavingLoc(false);
       }
     },
-    [lead]
+    [lead, refreshMatches]
   );
 
   // Seed the edit form from the current requirements and open it.
@@ -106,6 +118,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
     const r = lead?.requirements ?? {};
     setEdTxn(r.transactionType ?? 'Buy');
     setEdBudget(r.budgetMax != null ? String(r.budgetMax) : '');
+    setEdBeds(r.bedrooms != null ? String(r.bedrooms) : '');
     setEdType(r.propertyType ?? 'Any');
     setEdUrgency(r.urgency);
     setEdCustom(lead?.customFields ?? {});
@@ -121,6 +134,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
           ...lead.requirements,
           transactionType: edTxn,
           budgetMax: edBudget.trim() ? Number(edBudget) : undefined,
+          bedrooms: edBeds.trim() ? Number(edBeds) : undefined,
           propertyType: edType,
           urgency: edUrgency,
         },
@@ -128,12 +142,11 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
       });
       setLead(res.lead);
       setEditingReq(false);
-      const m = await leadsApi.matches(lead._id);
-      setMatches(m.matches);
+      await refreshMatches(lead._id);
     } finally {
       setSavingReq(false);
     }
-  }, [lead, edTxn, edBudget, edType, edUrgency, edCustom]);
+  }, [lead, edTxn, edBudget, edBeds, edType, edUrgency, edCustom, refreshMatches]);
 
   if (loading) {
     return (
@@ -219,6 +232,8 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
 
               <Input label="Budget (max)" value={edBudget} onChangeText={setEdBudget} placeholder="e.g. 8000000" keyboardType="numeric" />
 
+              <Input label="Bedrooms (BHK)" value={edBeds} onChangeText={setEdBeds} placeholder="e.g. 3" keyboardType="numeric" />
+
               <Text style={styles.editLabel}>Property type</Text>
               <View style={styles.chipWrap}>
                 {REQ_TYPES.map((t) => (
@@ -256,6 +271,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
               </Pressable>
               <DetailRow label="Looking to" value={req.transactionType ?? 'Buy'} />
               <DetailRow label="Budget (max)" value={formatCurrency(req.budgetMax)} />
+              <DetailRow label="Bedrooms" value={req.bedrooms != null ? `${req.bedrooms} BHK` : '—'} />
               <DetailRow label="Property type" value={req.propertyType ?? 'Any'} />
               <DetailRow label="Urgency" value={req.urgency ?? '—'} last />
             </>
@@ -312,7 +328,7 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
         </View>
 
         <Text style={styles.sectionTitle}>
-          Matching properties {matches.length ? `(${matches.length})` : ''}
+          Matching properties {matchTotal ? `(${matchTotal})` : ''}
         </Text>
         {matches.length === 0 ? (
           <Card>
@@ -332,13 +348,17 @@ export function LeadDetailScreen({ route, navigation }: RootScreenProps<'LeadDet
                   {p.propertyType} · {p.location}
                   {p.distanceKm != null ? ` · ${p.distanceKm} km` : ''}
                 </Text>
-                {p.matchScore != null ? (
-                  <Badge label={`${p.matchScore}% match`} tone={p.matchScore >= 75 ? 'success' : 'accent'} />
-                ) : null}
+                <MatchBadge score={p.matchScore} quality={p.matchQuality} />
               </View>
+              <MatchReasons reasons={p.matchReasons} />
             </Card>
           ))
         )}
+        {matchTotal > matches.length ? (
+          <Text style={styles.muted}>
+            Showing the {matches.length} strongest of {matchTotal} matches.
+          </Text>
+        ) : null}
       </ScrollView>
     </Screen>
   );

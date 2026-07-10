@@ -1,5 +1,6 @@
 import { api } from './client';
-import { Lead, Property, PropertyVoiceDraft } from '../types';
+import { LeadMatch, Property, PropertyVoiceDraft } from '../types';
+import { MatchMeta } from './leads';
 
 interface ListParams {
   q?: string;
@@ -34,6 +35,13 @@ export const propertiesApi = {
 
   remove: (id: string) => api.delete<{ message: string }>(`/properties/${id}`),
 
-  matchingLeads: (propertyId: string) =>
-    api.get<{ count: number; leads: Lead[] }>(`/properties/${propertyId}/leads`),
+  matchingLeads: (
+    propertyId: string,
+    params: { page?: number; limit?: number; radiusKm?: number } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v != null && qs.set(k, String(v)));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return api.get<MatchMeta & { leads: LeadMatch[] }>(`/properties/${propertyId}/leads${suffix}`);
+  },
 };

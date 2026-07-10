@@ -21,6 +21,35 @@ function isConfigured() {
   return Boolean(c.cloud_name && c.api_key && c.api_secret);
 }
 
+// Hosts Cloudinary serves assets from. `res.cloudinary.com` is the standard
+// delivery host; a private CDN distribution can be set via CLOUDINARY_CDN_HOST.
+const DELIVERY_HOSTS = new Set(
+  ['res.cloudinary.com', process.env.CLOUDINARY_CDN_HOST].filter(Boolean)
+);
+
+// True when `url` is an https asset we actually hosted, under our own cloud.
+//
+// Callers persist these URLs and the app renders them, so an unvalidated URL is
+// an injection point: a public form submitter could point a listing's photos at
+// any server they control. Checking the origin *and* the cloud name means a URL
+// on someone else's Cloudinary account is rejected too.
+function isDeliveryUrl(url) {
+  if (typeof url !== 'string') return false;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  if (!DELIVERY_HOSTS.has(parsed.hostname)) return false;
+
+  // Delivery URLs are /<cloud_name>/<resource_type>/<type>/...
+  const cloudName = cloudinary.config().cloud_name;
+  if (!cloudName) return false;
+  return parsed.pathname.startsWith(`/${cloudName}/`);
+}
+
 // Upload a raw buffer via an upload stream (nothing touches disk).
 //  - resourceType 'image' for photos, 'raw' for documents (pdf/doc/xls…),
 //    'auto' to let Cloudinary decide.
@@ -68,4 +97,4 @@ async function destroy(publicId, resourceType = 'image') {
   }
 }
 
-module.exports = { isConfigured, uploadBuffer, destroy, FOLDER };
+module.exports = { isConfigured, isDeliveryUrl, uploadBuffer, destroy, FOLDER };

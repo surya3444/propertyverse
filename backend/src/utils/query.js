@@ -19,20 +19,11 @@ function parsePagination(query, { defaultLimit = 50, maxLimit = 100 } = {}) {
   return { page, limit, skip: (page - 1) * limit };
 }
 
-// A buyer wants a Sale listing; a renter wants a Rent listing.
-function listingTypeForTransaction(transactionType) {
-  return transactionType === 'Rent' ? 'Rent' : 'Sale';
-}
-
-// Inverse: a Rent listing serves renters; anything else serves buyers.
-function transactionTypeForListing(listingType) {
-  return listingType === 'Rent' ? 'Rent' : 'Buy';
-}
+// The buy/rent ↔ sale/rent mapping now lives with the matching engine
+// (services/matchingService.js), which is the only thing that needs it.
 
 module.exports = {
   escapeRegex,
   containsRegex,
   parsePagination,
-  listingTypeForTransaction,
-  transactionTypeForListing,
 };

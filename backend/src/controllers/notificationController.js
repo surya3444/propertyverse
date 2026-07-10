@@ -1,26 +1,33 @@
-const jwt = require('jsonwebtoken');
 const Notification = require('../models/Notification');
 const PushToken = require('../models/PushToken');
 const { getVapidPublicKey } = require('../services/pushService');
 const notificationStream = require('../services/notificationStream');
 const { parsePagination } = require('../utils/query');
+const { verifyToken, bearerToken } = require('../middleware/auth');
+
+// How many concurrent streams one agent may hold. A client that reconnects
+// without closing (or an attacker looping the endpoint) would otherwise pin an
+// unbounded number of open responses in memory.
+const MAX_STREAMS_PER_AGENT = 8;
 
 // GET /api/notifications/stream — the self-hosted real-time push channel (SSE).
-// The Android foreground service (and the web app) hold this open and receive a
-// `notification` event per new notification. Auth is inline (not the shared
-// middleware) so it can accept a token via the Authorization header (native /
-// fetch) OR a `?token=` query param (browser EventSource, which can't set
-// headers). Excluded from the JSON body path; it never closes until the client
-// disconnects.
+// The Android foreground service holds this open and receives a `notification`
+// event per new notification. Auth is inline (not the shared middleware) only
+// because the response is a long-lived stream rather than a JSON body.
+//
+// The token must arrive in the Authorization header. It used to be accepted as
+// `?token=` for browser EventSource, but nothing used that path and query
+// strings get written to every proxy and access log in between — a logged token
+// is a valid session until it expires.
 exports.streamNotifications = (req, res) => {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
-  let agentId;
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    agentId = payload.sub;
-  } catch (_) {
+  const payload = verifyToken(bearerToken(req));
+  if (!payload) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+  const agentId = payload.sub;
+
+  if (notificationStream.clientCount(agentId) >= MAX_STREAMS_PER_AGENT) {
+    return res.status(429).json({ error: 'Too many open notification streams.' });
   }
 
   res.writeHead(200, {
@@ -109,8 +116,18 @@ exports.subscribeWebPush = async (req, res) => {
     if (!sub || !sub.endpoint || !sub.keys) {
       return res.status(400).json({ error: 'A valid push subscription is required.' });
     }
+    // A subscription belongs to whoever first registered it. Re-pointing another
+    // agent's endpoint at yourself would silently redirect their notifications,
+    // so an endpoint already claimed by someone else is rejected rather than
+    // stolen. A browser that legitimately changes hands re-subscribes with a
+    // fresh endpoint after the old one is unsubscribed.
+    const existing = await PushToken.findOne({ endpoint: sub.endpoint }).select('agentId').lean();
+    if (existing && String(existing.agentId) !== String(req.user.id)) {
+      return res.status(409).json({ error: 'That push subscription is already registered.' });
+    }
+
     await PushToken.findOneAndUpdate(
-      { endpoint: sub.endpoint },
+      { endpoint: sub.endpoint, agentId: req.user.id },
       {
         endpoint: sub.endpoint,
         keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
@@ -122,6 +139,10 @@ exports.subscribeWebPush = async (req, res) => {
     );
     res.status(200).json({ message: 'Subscribed to push notifications.' });
   } catch (error) {
+    // The unique index on `endpoint` races with the check above.
+    if (error && error.code === 11000) {
+      return res.status(409).json({ error: 'That push subscription is already registered.' });
+    }
     console.error('Subscribe web push error:', error);
     res.status(500).json({ error: 'Failed to subscribe.' });
   }
@@ -142,14 +163,26 @@ exports.unsubscribeWebPush = async (req, res) => {
 exports.registerPushToken = async (req, res) => {
   try {
     const { token, platform } = req.body;
-    if (!token) return res.status(400).json({ error: 'A push token is required.' });
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'A push token is required.' });
+    }
+    // Same rule as web push: a device token belongs to the agent who registered
+    // it, and cannot be claimed away by another.
+    const existing = await PushToken.findOne({ token }).select('agentId').lean();
+    if (existing && String(existing.agentId) !== String(req.user.id)) {
+      return res.status(409).json({ error: 'That push token is already registered.' });
+    }
+
     await PushToken.findOneAndUpdate(
-      { token },
+      { token, agentId: req.user.id },
       { token, agentId: req.user.id, provider: 'fcm', platform: platform || 'android' },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     res.status(200).json({ message: 'Push token registered.' });
   } catch (error) {
+    if (error && error.code === 11000) {
+      return res.status(409).json({ error: 'That push token is already registered.' });
+    }
     console.error('Register push token error:', error);
     res.status(500).json({ error: 'Failed to register push token.' });
   }

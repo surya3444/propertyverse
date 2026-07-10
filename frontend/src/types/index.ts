@@ -80,10 +80,33 @@ export interface LeadRequirements {
   transactionType?: TransactionType;
   budgetMax?: number;
   propertyType?: RequirementType;
+  /** Desired bedroom count (BHK), scored against a property's features.bedrooms. */
+  bedrooms?: number;
   location?: string;
   geo?: GeoPoint;
   urgency?: Urgency;
   rawAudioTranscript?: string;
+}
+
+// ---- Matching ----
+
+// How strong a match is, in words. Mirrors the backend's quality bands.
+export type MatchQuality = 'excellent' | 'strong' | 'fair' | 'weak' | 'unknown';
+
+// One human-readable justification for a match score. `warning` reasons are the
+// caveats an agent needs to know before they pitch (e.g. "6% over budget").
+export interface MatchReason {
+  code: string;
+  label: string;
+  tone: 'positive' | 'neutral' | 'warning';
+}
+
+// Attached by the matching endpoints to whichever side they return.
+export interface MatchInfo {
+  matchScore?: number;
+  matchQuality?: MatchQuality;
+  matchReasons?: MatchReason[];
+  distanceKm?: number;
 }
 
 // A person in the CRM. The same contact can own properties and/or be a buyer/tenant.
@@ -236,10 +259,13 @@ export interface Property {
   customFields?: CustomFieldValues;
   createdAt: string;
   updatedAt: string;
-  // Present on match results: relevance 0-100 and distance from the lead's area.
-  matchScore?: number;
-  distanceKm?: number;
 }
+
+// A property returned by the matching engine, with its score and rationale.
+export type PropertyMatch = Property & MatchInfo;
+
+// A lead returned by the reverse matching engine.
+export type LeadMatch = Lead & MatchInfo;
 
 // ---- Forms (public lead/property capture) ----
 

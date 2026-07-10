@@ -1,11 +1,28 @@
 import { create } from 'zustand';
 import { storage } from '../lib/storage';
 import { authApi } from '../api/auth';
-import { setAuthTokenGetter } from '../api/client';
+import { setAuthTokenGetter, setUnauthorizedHandler } from '../api/client';
+import { unregisterFromPush } from '../lib/push';
 import { User } from '../types';
 
 const TOKEN_KEY = 'pv_token';
 const USER_KEY = 'pv_user';
+
+// Read the `exp` claim without verifying the signature — the server does that.
+// We only need to know whether restoring this session is worth attempting, so an
+// unreadable token counts as expired.
+function isExpired(token: string): boolean {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload || typeof globalThis.atob !== 'function') return false;
+    const json = globalThis.atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const { exp } = JSON.parse(json);
+    if (typeof exp !== 'number') return true;
+    return exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
 
 interface AuthState {
   token: string | null;
@@ -36,10 +53,17 @@ export const useAuthStore = create<AuthState>((set) => ({
         storage.getItem(TOKEN_KEY),
         storage.getItem(USER_KEY),
       ]);
-      set({
-        token: token ?? null,
-        user: userJson ? (JSON.parse(userJson) as User) : null,
-      });
+
+      // An expired token would boot the agent into the logged-in UI and then 401
+      // on the first request. Drop it here and show the login screen instead.
+      if (!token || isExpired(token)) {
+        await clearSession();
+        return;
+      }
+
+      set({ token, user: userJson ? (JSON.parse(userJson) as User) : null });
+    } catch {
+      await clearSession();
     } finally {
       set({ initializing: false });
     }
@@ -70,7 +94,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await Promise.all([storage.removeItem(TOKEN_KEY), storage.removeItem(USER_KEY)]);
+    // Tear the push subscription down before dropping the token — it's an
+    // authenticated call. Otherwise the device keeps a live subscription bound
+    // to the previous agent, and whoever signs in next on this device receives
+    // their notifications.
+    await unregisterFromPush();
+    await clearSession();
     set({ token: null, user: null });
   },
 
@@ -84,5 +113,16 @@ async function persistSession(token: string, user: User) {
   ]);
 }
 
+async function clearSession() {
+  await Promise.all([storage.removeItem(TOKEN_KEY), storage.removeItem(USER_KEY)]);
+}
+
 // Let the api client read the current token for every request.
 setAuthTokenGetter(() => useAuthStore.getState().token);
+
+// A 401 from anywhere means the session is gone. Sign out rather than stranding
+// the agent on a screen that can never load.
+setUnauthorizedHandler(() => {
+  const { token, logout } = useAuthStore.getState();
+  if (token) logout().catch(() => {});
+});

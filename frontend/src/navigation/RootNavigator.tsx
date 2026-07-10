@@ -26,7 +26,12 @@ export function RootNavigator() {
   useEffect(() => {
     if (!token) return;
     registerForPush(token, notifyUnreadChanged);
-    return () => unregisterFromPush();
+    // Teardown is async, but an effect cleanup must not return a promise.
+    // logout() already awaits it before dropping the token; this covers a token
+    // that changes without a deliberate sign-out.
+    return () => {
+      unregisterFromPush().catch(() => {});
+    };
   }, [token]);
 
   // Stable so CallNudge's detector/notification effect doesn't restart each render.

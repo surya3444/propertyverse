@@ -47,8 +47,9 @@ export async function registerForPush(
   }
 }
 
-// Stop the stream + foreground service (e.g. on logout).
-export function unregisterFromPush(): void {
+// Stop the stream + foreground service (e.g. on logout). Async to match the web
+// implementation, which has an authenticated unsubscribe call to make.
+export async function unregisterFromPush(): Promise<void> {
   try {
     subscription?.remove();
     subscription = null;
